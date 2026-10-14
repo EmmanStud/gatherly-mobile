@@ -290,3 +290,20 @@ String? emailField(String? value) {
   }
   return null;
 }
+
+String? passwordField(String? value) {
+  if (value == null || value.isEmpty) return 'Please enter your password.';
+  if (value.length < 8 || value.length > 128) {
+    return 'Password must be between 8 and 128 characters.';
+  }
+  if (!RegExp(r'[A-Z]').hasMatch(value)
+      || !RegExp(r'[a-z]').hasMatch(value)
+      || !RegExp(r'\d').hasMatch(value)) {
+    return 'Include an uppercase letter, a lowercase letter, and a number.';
+  }
+  const supportedSpecialCharacters = "!@#\$%^&*()_+-=[]{}|;:'\",.<>/?~`";
+  if (!value.split('').any(supportedSpecialCharacters.contains)) {
+    return 'Include at least one supported special character.';
+  }
+  return null;
+}

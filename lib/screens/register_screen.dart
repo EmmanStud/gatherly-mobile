@@ -1,8 +1,9 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../models/models.dart';
 import '../state/app_state.dart';
+import '../services/gatherly_api.dart';
 import '../widgets/common.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -28,6 +29,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passwordController = TextEditingController();
 
   bool _hidePassword = true;
+  bool _isLoading = false;
 
   static const purple = Color(0xFF756FB8);
   static const darkText = Color(0xFF303342);
@@ -41,42 +43,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _register() {
+  Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final state = AppScope.of(context);
-    final current = state.profile;
+    setState(() => _isLoading = true);
+    try {
+      final state = AppScope.of(context);
+      final name = _nameController.text.trim();
+      final email = _emailController.text.trim();
+      final status = await state.api.emailStatus(email);
+      if (status.registered) {
+        throw const GatherlyApiException(
+          'Email is already registered, please log in to continue.',
+        );
+      }
 
-    state.updateProfile(
-      Profile(
-        name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
-        phone: current.phone,
-        organization: current.organization,
-      ),
-    );
+      if (!status.verified) {
+        var retryAfterSeconds = 60;
+        String? initialError;
+        try {
+          await state.api.sendVerification(name: name, email: email);
+        } on GatherlyApiException catch (error) {
+          if (error.statusCode != 429) rethrow;
+          retryAfterSeconds = error.retryAfterSeconds ?? 60;
+          initialError = error.message;
+        }
+        if (!mounted) return;
+        final verified = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _EmailVerificationDialog(
+            api: state.api,
+            name: name,
+            email: email,
+            initialRetryAfterSeconds: retryAfterSeconds,
+            initialError: initialError,
+          ),
+        );
+        if (verified != true || !mounted) return;
+      }
 
-    if (widget.onSuccess != null) {
-      widget.onSuccess!();
-    } else {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/dashboard',
-        (route) => false,
+      final result = await state.api.register(
+        name: name,
+        email: email,
+        password: _passwordController.text,
       );
+      state.signIn(result.user);
+      if (!mounted) return;
+      if (widget.onSuccess != null) {
+        widget.onSuccess!();
+      } else {
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+      }
+    } catch (error) {
+      if (mounted) showToast(context, error.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(
-        fontSize: 11,
-        color: Color(0xFFB0B0BA),
-      ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 12,
-      ),
+      hintStyle: const TextStyle(fontSize: 11, color: Color(0xFFB0B0BA)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFE7E7EC)),
@@ -131,10 +163,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             textCapitalization: TextCapitalization.words,
             style: const TextStyle(fontSize: 12),
             decoration: _inputDecoration('Enter your full name'),
-            validator: (value) =>
-                requiredField(value) == null
-                    ? null
-                    : 'Please enter your full name.',
+            validator: (value) => requiredField(value) == null
+                ? null
+                : 'Please enter your full name.',
           ),
           const SizedBox(height: 15),
 
@@ -155,36 +186,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
             controller: _passwordController,
             obscureText: _hidePassword,
             style: const TextStyle(fontSize: 12),
-            decoration: _inputDecoration('At least 6 characters').copyWith(
-              suffixIcon: IconButton(
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  _hidePassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
-                  size: 18,
+            decoration:
+                _inputDecoration(
+                  '8–128 characters, with a number and symbol',
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      _hidePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 18,
+                    ),
+                    onPressed: () {
+                      setState(() => _hidePassword = !_hidePassword);
+                    },
+                  ),
                 ),
-                onPressed: () {
-                  setState(() => _hidePassword = !_hidePassword);
-                },
-              ),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter a password.';
-              }
-              if (value.length < 6) {
-                return 'Password must be at least 6 characters.';
-              }
-              return null;
-            },
+            validator: passwordField,
           ),
           const SizedBox(height: 22),
 
           SizedBox(
             height: 43,
             child: ElevatedButton(
-              onPressed: _register,
+              onPressed: _isLoading ? null : _register,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2D3142),
                 foregroundColor: Colors.white,
@@ -193,13 +219,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text(
-                'Create account',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Create account',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 13),
@@ -259,6 +294,171 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _EmailVerificationDialog extends StatefulWidget {
+  const _EmailVerificationDialog({
+    required this.api,
+    required this.name,
+    required this.email,
+    required this.initialRetryAfterSeconds,
+    this.initialError,
+  });
+
+  final GatherlyApi api;
+  final String name;
+  final String email;
+  final int initialRetryAfterSeconds;
+  final String? initialError;
+
+  @override
+  State<_EmailVerificationDialog> createState() =>
+      _EmailVerificationDialogState();
+}
+
+class _EmailVerificationDialogState extends State<_EmailVerificationDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _code = TextEditingController();
+  Timer? _timer;
+  late int _resendSeconds;
+  String? _message;
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _error = widget.initialError;
+    _startResendCountdown(widget.initialRetryAfterSeconds);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _code.dispose();
+    super.dispose();
+  }
+
+  void _startResendCountdown(int seconds) {
+    _timer?.cancel();
+    _resendSeconds = seconds;
+    if (seconds <= 0) return;
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _resendSeconds--);
+      if (_resendSeconds <= 0) timer.cancel();
+    });
+  }
+
+  Future<void> _verify() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.api.verifyEmail(
+        email: widget.email,
+        code: _code.text.trim(),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resend() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _message = null;
+    });
+    try {
+      await widget.api.sendVerification(name: widget.name, email: widget.email);
+      if (!mounted) return;
+      setState(() => _message = 'A new verification code was sent.');
+      _startResendCountdown(60);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+      if (error is GatherlyApiException && error.statusCode == 429) {
+        _startResendCountdown(error.retryAfterSeconds ?? 60);
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Verify your email'),
+      content: SizedBox(
+        width: 360,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Enter the six-digit code sent to ${widget.email}.'),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _code,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Verification code',
+                ),
+                validator: (value) =>
+                    value == null || !RegExp(r'^\d{6}$').hasMatch(value)
+                    ? 'Enter the six-digit verification code.'
+                    : null,
+              ),
+              if (_message != null) ...[
+                const SizedBox(height: 8),
+                Text(_message!, style: const TextStyle(color: Colors.green)),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _busy || _resendSeconds > 0 ? null : _resend,
+          child: Text(
+            _resendSeconds > 0 ? 'Resend in ${_resendSeconds}s' : 'Resend',
+          ),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _verify,
+          child: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Verify'),
+        ),
+      ],
     );
   }
 }

@@ -6,6 +6,28 @@ enum EventStatus {
   final String label;
 }
 
+class AuthUser {
+  const AuthUser({
+    required this.name,
+    required this.email,
+    required this.accountType,
+  });
+
+  final String name;
+  final String email;
+  final String accountType;
+
+  factory AuthUser.fromJson(Map<String, dynamic> json) {
+    final name = json['name'];
+    final email = json['email'];
+    final accountType = json['accountType'];
+    if (name is! String || email is! String || accountType is! String) {
+      throw const FormatException('The server returned an invalid user.');
+    }
+    return AuthUser(name: name, email: email, accountType: accountType);
+  }
+}
+
 class Event {
   const Event({
     required this.id,

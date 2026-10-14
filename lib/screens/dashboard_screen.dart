@@ -38,8 +38,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (scaffold != null && scaffold.isDrawerOpen) scaffold.closeDrawer();
   }
 
-  void _signOut() {
+  Future<void> _signOut() async {
+    final messenger = ScaffoldMessenger.of(context);
+    String? signOutError;
+    try {
+      await AppScope.of(context).signOut();
+    } catch (error) {
+      signOutError = error.toString();
+    }
+    if (!mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    if (signOutError != null) {
+      showToastOn(messenger, 'Signed out on this device. $signOutError');
+    }
   }
 
   Future<void> _createEvent() async {
@@ -201,7 +212,9 @@ class DashboardSidebar extends StatelessWidget {
                     icon: item.$1,
                     label: item.$2,
                     selected: active == item.$2,
-                    badge: item.$2 == 'Orders' ? '${state.paidOrderCount}' : null,
+                    badge: item.$2 == 'Orders'
+                        ? '${state.paidOrderCount}'
+                        : null,
                     onTap: () => onSelect(item.$2),
                   ),
                 const Spacer(),
@@ -223,17 +236,29 @@ class DashboardSidebar extends StatelessWidget {
                           color: AppColors.yellow,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.help_outline, color: AppColors.ink, size: 20),
+                        child: const Icon(
+                          Icons.help_outline,
+                          color: AppColors.ink,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       const Text(
                         'Need a hand?',
-                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
                         'Our event experts are here to help.',
-                        style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       InkWell(
@@ -289,7 +314,11 @@ class _SidebarLogo extends StatelessWidget {
             color: AppColors.primary,
             borderRadius: BorderRadius.circular(12),
             boxShadow: const [
-              BoxShadow(color: Color(0x59756FB8), blurRadius: 18, offset: Offset(0, 8)),
+              BoxShadow(
+                color: Color(0x59756FB8),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
             ],
           ),
           alignment: Alignment.center,
@@ -355,19 +384,30 @@ class _NavItem extends StatelessWidget {
                 Expanded(
                   child: Text(
                     label,
-                    style: TextStyle(color: color, fontSize: 14, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 if (badge != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.primary,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       badge!,
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
               ],
@@ -384,7 +424,11 @@ class _NavItem extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.wide, required this.onMenu, required this.onProfile});
+  const _TopBar({
+    required this.wide,
+    required this.onMenu,
+    required this.onProfile,
+  });
 
   final bool wide;
   final VoidCallback onMenu;
@@ -404,7 +448,11 @@ class _TopBar extends StatelessWidget {
       child: Row(
         children: [
           if (!wide) ...[
-            _SquareButton(icon: Icons.menu_rounded, tooltip: 'Open menu', onTap: onMenu),
+            _SquareButton(
+              icon: Icons.menu_rounded,
+              tooltip: 'Open menu',
+              onTap: onMenu,
+            ),
             const SizedBox(width: 12),
           ],
           const Spacer(),
@@ -413,7 +461,10 @@ class _TopBar extends StatelessWidget {
               _SquareButton(
                 icon: Icons.notifications_none_rounded,
                 tooltip: 'Notifications',
-                onTap: () => showToast(context, 'You’re all caught up—no new notifications.'),
+                onTap: () => showToast(
+                  context,
+                  'You’re all caught up—no new notifications.',
+                ),
               ),
               Positioned(
                 right: 11,
@@ -452,11 +503,17 @@ class _TopBar extends StatelessWidget {
                       children: [
                         Text(
                           profile.name,
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const Text(
                           'Event organizer',
-                          style: TextStyle(fontSize: 11, color: AppColors.muted),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.muted,
+                          ),
                         ),
                       ],
                     ),
@@ -472,7 +529,11 @@ class _TopBar extends StatelessWidget {
 }
 
 class _SquareButton extends StatelessWidget {
-  const _SquareButton({required this.icon, required this.tooltip, required this.onTap});
+  const _SquareButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String tooltip;
@@ -489,7 +550,9 @@ class _SquareButton extends StatelessWidget {
           side: const BorderSide(color: Color(0x12000000)),
         ),
         child: InkWell(
-          customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          customBorder: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           onTap: onTap,
           child: SizedBox(
             width: 44,
@@ -517,9 +580,11 @@ class _PageHeading extends StatelessWidget {
     final eyebrow = overview
         ? formatLongDate(now).toUpperCase()
         : active == 'Help Center'
-            ? 'SUPPORT'
-            : 'ORGANIZER WORKSPACE';
-    final title = overview ? '${greeting(now)}, ${state.profile.firstName}.' : active;
+        ? 'SUPPORT'
+        : 'ORGANIZER WORKSPACE';
+    final title = overview
+        ? '${greeting(now)}, ${state.profile.firstName}.'
+        : active;
     final subtitle = switch (active) {
       'Overview' => 'Here’s what’s happening across your events.',
       'Help Center' => 'Find answers or get in touch with the Gatherly team.',
@@ -549,10 +614,18 @@ class _PageHeading extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -1.2, height: 1.15),
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -1.2,
+                height: 1.15,
+              ),
             ),
             const SizedBox(height: 8),
-            Text(subtitle, style: const TextStyle(fontSize: 14, color: Color(0x73000000))),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 14, color: Color(0x73000000)),
+            ),
           ],
         ),
         if (overview || active == 'Events')
@@ -600,27 +673,56 @@ class _Metrics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tiles = [
-      _Kpi('Total revenue', formatPeso(state.demoRevenueCentavos), '+12.4%',
-          Icons.bar_chart_rounded, AppColors.kpiPurpleBg, AppColors.primary),
-      _Kpi('Tickets sold', groupThousands(state.ticketsSold), '+8.2%',
-          Icons.confirmation_number_outlined, AppColors.kpiBlueBg, AppColors.kpiBlue),
-      _Kpi('Total attendees', groupThousands(state.demoAttendeeCount), '+16.8%',
-          Icons.people_outline, AppColors.kpiGreenBg, AppColors.kpiGreen),
-      _Kpi('Active events', '${state.activeEvents}', '${state.draftEvents} drafts',
-          Icons.calendar_month_outlined, AppColors.kpiSandBg, AppColors.kpiSand),
+      _Kpi(
+        'Total revenue',
+        formatPeso(state.demoRevenueCentavos),
+        '+12.4%',
+        Icons.bar_chart_rounded,
+        AppColors.kpiPurpleBg,
+        AppColors.primary,
+      ),
+      _Kpi(
+        'Tickets sold',
+        groupThousands(state.ticketsSold),
+        '+8.2%',
+        Icons.confirmation_number_outlined,
+        AppColors.kpiBlueBg,
+        AppColors.kpiBlue,
+      ),
+      _Kpi(
+        'Total attendees',
+        groupThousands(state.demoAttendeeCount),
+        '+16.8%',
+        Icons.people_outline,
+        AppColors.kpiGreenBg,
+        AppColors.kpiGreen,
+      ),
+      _Kpi(
+        'Active events',
+        '${state.activeEvents}',
+        '${state.draftEvents} drafts',
+        Icons.calendar_month_outlined,
+        AppColors.kpiSandBg,
+        AppColors.kpiSand,
+      ),
     ];
 
-    return LayoutBuilder(builder: (context, box) {
-      final columns = box.maxWidth >= 1100 ? 4 : (box.maxWidth >= 600 ? 2 : 1);
-      final width = (box.maxWidth - (columns - 1) * 16) / columns;
-      return Wrap(
-        spacing: 16,
-        runSpacing: 16,
-        children: [
-          for (final tile in tiles) SizedBox(width: width, child: _KpiCard(tile)),
-        ],
-      );
-    });
+    return LayoutBuilder(
+      builder: (context, box) {
+        final columns = box.maxWidth >= 1100
+            ? 4
+            : (box.maxWidth >= 600 ? 2 : 1);
+        final width = (box.maxWidth - (columns - 1) * 16) / columns;
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [
+            for (final tile in tiles)
+              SizedBox(width: width, child: _KpiCard(tile)),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -654,7 +756,10 @@ class _KpiCard extends StatelessWidget {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(color: kpi.bg, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: kpi.bg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: Icon(kpi.icon, size: 19, color: kpi.fg),
               ),
               const Icon(Icons.more_horiz, color: Color(0x40000000)),
@@ -663,7 +768,11 @@ class _KpiCard extends StatelessWidget {
           const SizedBox(height: 22),
           Text(
             kpi.label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.muted,
+            ),
           ),
           const SizedBox(height: 6),
           Row(
@@ -676,7 +785,11 @@ class _KpiCard extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     kpi.value,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -.5),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.5,
+                    ),
                   ),
                 ),
               ),
@@ -688,7 +801,9 @@ class _KpiCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    color: positive ? const Color(0xFF059669) : const Color(0x59000000),
+                    color: positive
+                        ? const Color(0xFF059669)
+                        : const Color(0x59000000),
                   ),
                 ),
               ),
@@ -718,7 +833,10 @@ class _NextUpCard extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(color: AppColors.yellow, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: AppColors.yellow,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -748,7 +866,10 @@ class _NextUpCard extends StatelessWidget {
             spacing: 20,
             runSpacing: 8,
             children: [
-              _InfoChip(Icons.calendar_today_outlined, formatDate(event.startAt)),
+              _InfoChip(
+                Icons.calendar_today_outlined,
+                formatDate(event.startAt),
+              ),
               _InfoChip(Icons.location_on_outlined, event.venue),
             ],
           ),
@@ -765,7 +886,9 @@ class _NextUpCard extends StatelessWidget {
                   minimumSize: const Size(0, 44),
                 ),
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => EventDetailsScreen(eventId: event.id)),
+                  MaterialPageRoute(
+                    builder: (_) => EventDetailsScreen(eventId: event.id),
+                  ),
                 ),
                 label: const Text('Manage event'),
                 icon: const Icon(Icons.chevron_right, size: 18),
@@ -777,16 +900,26 @@ class _NextUpCard extends StatelessWidget {
                   Text.rich(
                     TextSpan(
                       text: '${event.sold} ',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
                       children: [
                         TextSpan(
                           text: '/ ${event.capacity}',
-                          style: const TextStyle(color: Colors.white38, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const Text('tickets sold', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                  const Text(
+                    'tickets sold',
+                    style: TextStyle(color: Colors.white38, fontSize: 10),
+                  ),
                 ],
               ),
             ],
@@ -803,7 +936,8 @@ class _NextUpCard extends StatelessWidget {
           child: Image.network(
             kEventImageUrl,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stack) => const ColoredBox(color: AppColors.panel),
+            errorBuilder: (context, error, stack) =>
+                const ColoredBox(color: AppColors.panel),
           ),
         ),
         const DecoratedBox(
@@ -831,28 +965,39 @@ class _NextUpCard extends StatelessWidget {
       color: AppColors.panel,
       padding: EdgeInsets.zero,
       clip: true,
-      child: LayoutBuilder(builder: (context, box) {
-        if (box.maxWidth < 700) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [SizedBox(height: 150, child: photo), info],
-          );
-        }
-        // The text column decides the height; the photo fills the right side.
-        final photoWidth = box.maxWidth * .45;
-        return Stack(
-          children: [
-            Positioned(top: 0, bottom: 0, right: 0, width: photoWidth, child: photo),
-            Padding(
-              padding: EdgeInsets.only(right: photoWidth),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 260),
-                child: info,
+      child: LayoutBuilder(
+        builder: (context, box) {
+          if (box.maxWidth < 700) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(height: 150, child: photo),
+                info,
+              ],
+            );
+          }
+          // The text column decides the height; the photo fills the right side.
+          final photoWidth = box.maxWidth * .45;
+          return Stack(
+            children: [
+              Positioned(
+                top: 0,
+                bottom: 0,
+                right: 0,
+                width: photoWidth,
+                child: photo,
               ),
-            ),
-          ],
-        );
-      }),
+              Padding(
+                padding: EdgeInsets.only(right: photoWidth),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 260),
+                  child: info,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -873,7 +1018,11 @@ class _InfoChip extends StatelessWidget {
         Flexible(
           child: Text(
             text,
-            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],

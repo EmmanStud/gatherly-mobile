@@ -9,7 +9,7 @@ const Color gatherlyInk = Color(0xFF2D3142);
 const Color gatherlyYellow = Color(0xFFF4DFA6);
 
 class WelcomeScreen extends StatelessWidget {
-  WelcomeScreen({super.key});
+  const WelcomeScreen({super.key});
 
   void _showAuthDialog(
     BuildContext context, {

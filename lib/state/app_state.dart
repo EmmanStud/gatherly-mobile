@@ -1,10 +1,18 @@
 import 'package:flutter/widgets.dart';
 
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 
 /// In-memory app state seeded with the Figma sample data.
 /// Replace the methods with repository/API calls when the backend is ready.
 class AppState extends ChangeNotifier {
+  AppState({GatherlyApi? api}) : _api = api ?? GatherlyApi();
+
+  final GatherlyApi _api;
+  AuthUser? _user;
+  bool _isRestoringSession = true;
+  String? _sessionRestoreError;
+
   final List<Event> _events = [
     Event(
       id: 1,
@@ -78,6 +86,54 @@ class AppState extends ChangeNotifier {
   List<Attendee> get attendees => List.unmodifiable(_attendees);
   Profile get profile => _profile;
   Preferences get preferences => _preferences;
+  AuthUser? get user => _user;
+  GatherlyApi get api => _api;
+  bool get isAuthenticated => _user != null;
+  bool get isRestoringSession => _isRestoringSession;
+  String? get sessionRestoreError => _sessionRestoreError;
+
+  Future<void> restoreSession() async {
+    _isRestoringSession = true;
+    _sessionRestoreError = null;
+    notifyListeners();
+    try {
+      final user = await _api.currentUser();
+      if (user != null) signIn(user);
+    } catch (error) {
+      _sessionRestoreError = error.toString();
+    } finally {
+      _isRestoringSession = false;
+      notifyListeners();
+    }
+  }
+
+  void continueWithoutSession() {
+    _sessionRestoreError = null;
+    notifyListeners();
+  }
+
+  void signIn(AuthUser user) {
+    _user = user;
+    _profile = Profile(
+      name: user.name,
+      email: user.email,
+      phone: _profile.phone,
+      organization: _profile.organization,
+    );
+    notifyListeners();
+  }
+
+  Future<void> signOut() async {
+    _user = null;
+    notifyListeners();
+    await _api.logout();
+  }
+
+  @override
+  void dispose() {
+    _api.close();
+    super.dispose();
+  }
 
   int get ticketsSold => _events.fold(0, (sum, e) => sum + e.sold);
   int get activeEvents =>
