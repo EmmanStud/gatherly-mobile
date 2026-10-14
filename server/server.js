@@ -18,6 +18,8 @@ const verificationLifetimeMs = 10 * 60 * 1000;
 const verificationResendDelayMs = 60 * 1000;
 const verificationMaxAttempts = 5;
 const passwordResetLifetimeMs = 10 * 60 * 1000;
+const eventCodeCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const publicAppUrl = process.env.PUBLIC_APP_URL || "http://127.0.0.1:5173";
 const corsOrigins = new Set(
   (process.env.CORS_ORIGINS || "")
     .split(",")
@@ -31,7 +33,7 @@ app.use((req, res, next) => {
   const origin = req.get("origin");
   if (origin && corsOrigins.has(origin)) {
     res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
     res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
   } else if (origin && req.method === "OPTIONS") {
     return res.status(403).json({ error: "Origin is not allowed." });
@@ -60,6 +62,8 @@ async function getDatabase() {
         database.collection("email_verifications").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
         database.collection("password_resets").createIndex({ email: 1 }, { unique: true }),
         database.collection("password_resets").createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+        database.collection("events").createIndex({ ownerId: 1 }),
+        database.collection("events").createIndex({ eventCode: 1 }, { unique: true, sparse: true }),
       ]);
       return { client, database };
     })().catch((error) => {
@@ -129,6 +133,26 @@ function getBearerToken(req) {
   return match ? match[1] : null;
 }
 
+function requireAuth(req, res, next) {
+  const token = getBearerToken(req);
+  if (!token) {
+    return res.status(401).json({ error: "Please sign in to continue." });
+  }
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
+    if (typeof payload.sub !== "string"
+      || !["customer", "admin"].includes(payload.accountType)) {
+      return res.status(401).json({ error: "Please sign in to continue." });
+    }
+    req.userId = payload.sub;
+    req.accountType = payload.accountType;
+    next();
+  } catch {
+    res.status(401).json({ error: "Your session has expired. Please sign in again." });
+  }
+}
+
 function readSession(token) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
@@ -141,6 +165,126 @@ function readSession(token) {
   } catch {
     return null;
   }
+}
+
+function objectId(value) {
+  return typeof value === "string" && ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+
+function serialize(document) {
+  const { _id, ownerId, ...fields } = document;
+  return { ...fields, id: _id.toString() };
+}
+
+function createEventCode() {
+  return Array.from(
+    { length: 7 },
+    () => eventCodeCharacters[crypto.randomInt(eventCodeCharacters.length)],
+  ).join("");
+}
+
+function getRegistrationUrl(eventCode) {
+  return `${publicAppUrl.replace(/\/+$/, "")}/events/${encodeURIComponent(eventCode)}`;
+}
+
+function validEventString(value, maxLength) {
+  return typeof value === "string"
+    && value.trim().length > 0
+    && value.trim().length <= maxLength;
+}
+
+function isValidIsoDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isEventDateToday(event) {
+  const todayParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type) => todayParts.find((item) => item.type === type)?.value || "";
+  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  const startDate = event.date;
+  const endDate = event.multipleDay && event.endDate ? event.endDate : startDate;
+  return isValidIsoDate(startDate)
+    && isValidIsoDate(endDate)
+    && startDate <= today
+    && today <= endDate;
+}
+
+function getEventEndAt(event) {
+  const date = event.multipleDay && event.endDate ? event.endDate : event.date;
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(event.time || "");
+  if (!isValidIsoDate(date) || !timeMatch) {
+    return null;
+  }
+  const hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hours - 8, minutes));
+}
+
+function validateEvent(body) {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const multipleDay = body.multipleDay === true;
+  const pricingMode = body.pricingMode;
+  const priceCents = body.priceCents;
+  const ticketTypes = Array.isArray(body.ticketTypes) ? body.ticketTypes : [];
+  if (!validEventString(body.name, 120)
+    || !validEventString(body.date, 40)
+    || !validEventString(body.time, 40)
+    || !validEventString(body.venue, 200)
+    || !validEventString(body.description, 5000)
+    || !validEventString(body.category, 100)
+    || !validEventString(body.headliner, 150)
+    || typeof body.multipleDay !== "boolean"
+    || (multipleDay && (!isValidIsoDate(body.date) || !isValidIsoDate(body.endDate) || body.endDate <= body.date))
+    || !Number.isInteger(body.total) || body.total < 1 || body.total > 100000
+    || !["free", "single", "multiple"].includes(pricingMode)
+    || (pricingMode === "single" && (!Number.isInteger(priceCents) || priceCents < 1 || priceCents > 100000000))
+    || (pricingMode === "multiple" && (ticketTypes.length < 2 || ticketTypes.length > 10
+      || ticketTypes.some((ticket) => !ticket || typeof ticket !== "object"
+        || !validEventString(ticket.name, 80)
+        || !Number.isInteger(ticket.priceCents) || ticket.priceCents < 1 || ticket.priceCents > 100000000)))) {
+    return null;
+  }
+
+  const normalizedTicketTypes = pricingMode === "multiple"
+    ? ticketTypes.map((ticket) => ({
+      id: typeof ticket.id === "string" && /^[a-z0-9]{12}$/i.test(ticket.id)
+        ? ticket.id
+        : crypto.randomBytes(6).toString("hex"),
+      name: ticket.name.trim(),
+      priceCents: ticket.priceCents,
+    }))
+    : [];
+  return {
+    name: body.name.trim(),
+    date: body.date,
+    multipleDay,
+    endDate: multipleDay ? body.endDate : "",
+    time: body.time,
+    venue: body.venue.trim(),
+    description: body.description.trim(),
+    category: body.category.trim(),
+    headliner: body.headliner.trim(),
+    total: body.total,
+    pricingMode,
+    priceCents: pricingMode === "single" ? priceCents : 0,
+    ticketTypes: normalizedTicketTypes,
+  };
 }
 
 function emailJsConfigured() {
@@ -594,6 +738,265 @@ app.post("/api/auth/password-reset/complete", asyncRoute(async (req, res) => {
   }
   await resets.deleteOne({ _id: reset._id });
   res.json({ message: "Password reset successfully. You can now sign in with your new password." });
+}));
+
+app.get("/api/events", requireAuth, asyncRoute(async (req, res) => {
+  const events = await req.db.collection("events")
+    .find({ ownerId: req.userId })
+    .sort({ _id: -1 })
+    .toArray();
+  res.json(events.map(serialize));
+}));
+
+app.post("/api/events", requireAuth, asyncRoute(async (req, res) => {
+  const values = validateEvent(req.body);
+  if (!values) {
+    return res.status(400).json({
+      error: "Enter valid event details, including a later end date for multiple-day events.",
+    });
+  }
+
+  const events = req.db.collection("events");
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const event = {
+      ...values,
+      eventCode: createEventCode(),
+      sold: 0,
+      status: "Draft",
+      ownerId: req.userId,
+    };
+    try {
+      const result = await events.insertOne(event);
+      return res.status(201).json(serialize({ ...event, _id: result.insertedId }));
+    } catch (error) {
+      if (error.code !== 11000 || error.keyPattern?.eventCode !== 1) {
+        throw error;
+      }
+    }
+  }
+  return res.status(503).json({ error: "Could not generate a unique event ID. Please try again." });
+}));
+
+app.patch("/api/events/:id/publish", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid event ID." });
+  }
+
+  const events = req.db.collection("events");
+  const draftEvent = await events.findOne(
+    { _id: id, ownerId: req.userId, status: "Draft" },
+    { projection: { eventCode: 1 } },
+  );
+  if (!draftEvent) {
+    const existingEvent = await events.findOne(
+      { _id: id, ownerId: req.userId },
+      { projection: { status: 1 } },
+    );
+    if (!existingEvent) {
+      return res.status(404).json({ error: "Event not found." });
+    }
+    return res.status(409).json({ error: "This event is already published." });
+  }
+
+  const result = await events.findOneAndUpdate(
+    { _id: id, ownerId: req.userId, status: "Draft", eventCode: draftEvent.eventCode },
+    {
+      $set: {
+        status: "On sale",
+        registrationUrl: getRegistrationUrl(draftEvent.eventCode),
+      },
+    },
+    { returnDocument: "after" },
+  );
+  if (!result) {
+    return res.status(409).json({
+      error: "The event changed while it was being published. Refresh and try again.",
+    });
+  }
+  return res.json(serialize(result));
+}));
+
+app.patch("/api/events/:id/finish", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid event ID." });
+  }
+
+  const events = req.db.collection("events");
+  const event = await events.findOne({ _id: id, ownerId: req.userId });
+  if (!event) {
+    return res.status(404).json({ error: "Event not found." });
+  }
+  if (event.status !== "On sale") {
+    return res.status(409).json({ error: "Only published events can be marked as finished." });
+  }
+  const eventEndAt = getEventEndAt(event);
+  if (!eventEndAt || eventEndAt > new Date()) {
+    return res.status(409).json({ error: "An event can only be finished after its end date and time." });
+  }
+
+  const result = await events.findOneAndUpdate(
+    {
+      _id: id,
+      ownerId: req.userId,
+      status: "On sale",
+      date: event.date,
+      endDate: event.endDate,
+      time: event.time,
+      multipleDay: event.multipleDay,
+    },
+    { $set: { status: "Finished", finishedAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  if (!result) {
+    return res.status(409).json({
+      error: "The event changed while it was being finished. Refresh and try again.",
+    });
+  }
+  return res.json(serialize(result));
+}));
+
+app.patch("/api/events/:id/cancel", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid event ID." });
+  }
+
+  const events = req.db.collection("events");
+  const result = await events.findOneAndUpdate(
+    { _id: id, ownerId: req.userId, status: { $in: ["Draft", "On sale"] } },
+    { $set: { status: "Cancelled", cancelledAt: new Date() } },
+    { returnDocument: "after" },
+  );
+  if (!result) {
+    const existingEvent = await events.findOne(
+      { _id: id, ownerId: req.userId },
+      { projection: { status: 1 } },
+    );
+    if (!existingEvent) {
+      return res.status(404).json({ error: "Event not found." });
+    }
+    return res.status(409).json({ error: "Only draft or published events can be cancelled." });
+  }
+  return res.json(serialize(result));
+}));
+
+app.patch("/api/events/:id", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  const values = validateEvent(req.body);
+  if (!id || !values) {
+    return res.status(400).json({
+      error: "Enter valid event update details, including a later end date for multiple-day events.",
+    });
+  }
+
+  const result = await req.db.collection("events").findOneAndUpdate(
+    { _id: id, ownerId: req.userId },
+    { $set: values },
+    { returnDocument: "after" },
+  );
+  if (!result) {
+    return res.status(404).json({ error: "Event not found." });
+  }
+  res.json(serialize(result));
+}));
+
+app.delete("/api/events/:id", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "Invalid event ID." });
+  }
+  const result = await req.db.collection("events").deleteOne({ _id: id, ownerId: req.userId });
+  if (!result.deletedCount) {
+    return res.status(404).json({ error: "Event not found." });
+  }
+  res.status(204).end();
+}));
+
+app.get("/api/orders", requireAuth, asyncRoute(async (req, res) => {
+  const orders = await req.db.collection("ticket_orders")
+    .find({ ownerId: req.userId })
+    .sort({ _id: -1 })
+    .toArray();
+  res.json(orders.map(serialize));
+}));
+
+app.patch("/api/orders/:id", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  if (!id || req.body?.status !== "Refunded") {
+    return res.status(400).json({ error: "Invalid order update." });
+  }
+  const result = await req.db.collection("ticket_orders").findOneAndUpdate(
+    { _id: id, ownerId: req.userId, status: "Paid" },
+    { $set: { status: "Refunded" } },
+    { returnDocument: "after" },
+  );
+  if (!result) {
+    const order = await req.db.collection("ticket_orders").findOne(
+      { _id: id, ownerId: req.userId },
+      { projection: { status: 1, checkoutSessionId: 1 } },
+    );
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+    return res.status(409).json({
+      error: order.checkoutSessionId
+        ? "PayMongo refunds must be processed through your PayMongo dashboard."
+        : "Only paid orders can be marked as refunded.",
+    });
+  }
+  res.json(serialize(result));
+}));
+
+app.get("/api/attendees", requireAuth, asyncRoute(async (req, res) => {
+  const attendees = await req.db.collection("attendees")
+    .find({ ownerId: req.userId })
+    .sort({ _id: 1 })
+    .toArray();
+  res.json(attendees.map(serialize));
+}));
+
+app.patch("/api/attendees/:id", requireAuth, asyncRoute(async (req, res) => {
+  const id = objectId(req.params.id);
+  if (!id || typeof req.body?.checkedIn !== "boolean") {
+    return res.status(400).json({ error: "Invalid attendee update." });
+  }
+  if (req.body.checkedIn) {
+    const attendee = await req.db.collection("attendees").findOne(
+      { _id: id, ownerId: req.userId },
+      { projection: { eventId: 1, eventCode: 1, date: 1, endDate: 1 } },
+    );
+    if (!attendee) {
+      return res.status(404).json({ error: "Attendee not found." });
+    }
+    const event = attendee.eventId
+      ? await req.db.collection("events").findOne(
+        { _id: attendee.eventId, ownerId: req.userId },
+        { projection: { date: 1, endDate: 1, multipleDay: 1 } },
+      )
+      : attendee.eventCode
+        ? await req.db.collection("events").findOne(
+          { eventCode: attendee.eventCode, ownerId: req.userId },
+          { projection: { date: 1, endDate: 1, multipleDay: 1 } },
+        )
+        : null;
+    const checkInEvent = event || { ...attendee, multipleDay: Boolean(attendee.endDate) };
+    if (!isEventDateToday(checkInEvent)) {
+      return res.status(409).json({
+        error: "Attendees can only be checked in on the event date.",
+      });
+    }
+  }
+  const result = await req.db.collection("attendees").findOneAndUpdate(
+    { _id: id, ownerId: req.userId },
+    { $set: { checkedIn: req.body.checkedIn } },
+    { returnDocument: "after" },
+  );
+  if (!result) {
+    return res.status(404).json({ error: "Attendee not found." });
+  }
+  res.json(serialize(result));
 }));
 
 app.use((req, res) => res.status(404).json({ error: "Not found." }));
