@@ -40,6 +40,13 @@ String groupThousands(int value) {
 /// Money is stored in centavos; 250000 -> ₱2,500
 String formatPeso(int centavos) => '₱${groupThousands(centavos ~/ 100)}';
 
+/// Formats centavos as pesos without discarding the fractional part.
+String formatPesoExact(int centavos) {
+  final absolute = centavos.abs();
+  final amount = '${groupThousands(absolute ~/ 100)}.${(absolute % 100).toString().padLeft(2, '0')}';
+  return '${centavos < 0 ? '-' : ''}₱$amount';
+}
+
 /// Builds up to two initials from the name.
 String initials(String name) {
   final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);

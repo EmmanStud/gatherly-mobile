@@ -157,6 +157,7 @@ class Order {
     required this.email,
     required this.eventName,
     required this.eventId,
+    required this.eventCode,
     required this.ticket,
     required this.amountCents,
     required this.status,
@@ -169,6 +170,7 @@ class Order {
   final String email;
   final String eventName;
   final String eventId;
+  final String eventCode;
   final String ticket;
   final int amountCents;
   final String status;
@@ -185,6 +187,7 @@ class Order {
     email: _asString(json['email']),
     eventName: _asString(json['event']),
     eventId: json['eventId']?.toString() ?? '',
+    eventCode: _asString(json['eventCode']),
     ticket: _asString(json['ticket']),
     amountCents: _asInt(json['amountCents']),
     status: _asString(json['status']),
@@ -199,6 +202,7 @@ class Attendee {
     required this.email,
     required this.eventName,
     required this.eventId,
+    required this.eventCode,
     required this.ticket,
     required this.orderNumber,
     required this.checkedIn,
@@ -211,6 +215,7 @@ class Attendee {
   final String email;
   final String eventName;
   final String eventId;
+  final String eventCode;
   final String ticket;
   final String orderNumber;
   final bool checkedIn;
@@ -223,6 +228,7 @@ class Attendee {
     email: _asString(json['email']),
     eventName: _asString(json['event']),
     eventId: json['eventId']?.toString() ?? '',
+    eventCode: _asString(json['eventCode']),
     ticket: _asString(json['ticket']),
     orderNumber: _asString(json['orderNumber']),
     checkedIn: json['checkedIn'] == true,
@@ -271,6 +277,24 @@ class Preferences {
     weeklySummary: weeklySummary ?? this.weeklySummary,
     twoFactor: twoFactor ?? this.twoFactor,
   );
+
+  factory Preferences.fromJson(Map<String, dynamic> json) => Preferences(
+    orderEmails: json['orderEmails'] is bool ? json['orderEmails'] as bool : true,
+    eventReminders: json['eventReminders'] is bool
+        ? json['eventReminders'] as bool
+        : true,
+    weeklySummary: json['weeklySummary'] is bool
+        ? json['weeklySummary'] as bool
+        : false,
+    twoFactor: json['twoFactor'] is bool ? json['twoFactor'] as bool : false,
+  );
+
+  Map<String, Object> toJson() => {
+    'orderEmails': orderEmails,
+    'eventReminders': eventReminders,
+    'weeklySummary': weeklySummary,
+    'twoFactor': twoFactor,
+  };
 }
 
 String _asString(Object? value, {String fallback = ''}) =>

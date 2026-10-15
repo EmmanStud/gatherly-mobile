@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:final_project/models/models.dart';
+import 'package:final_project/core/analytics.dart';
 import 'package:final_project/services/gatherly_api.dart';
 import 'package:final_project/widgets/common.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -210,6 +211,92 @@ void main() {
     expect(request.url.path, '/api/events');
     expect(request.headers['Authorization'], startsWith('Bearer '));
     api.close();
+  });
+
+  test('revenue buckets use Paid orders and Asia/Manila time', () {
+    final orders = [
+      Order(
+        id: 'paid-today',
+        number: 'A-1',
+        buyer: 'Buyer One',
+        email: 'one@example.com',
+        eventName: 'Event',
+        eventId: 'event-1',
+        eventCode: 'EVT1234',
+        ticket: 'General',
+        amountCents: 12500,
+        status: 'Paid',
+        paidAt: DateTime.parse('2026-10-14T16:30:00Z'),
+      ),
+      Order(
+        id: 'paid-yesterday',
+        number: 'A-2',
+        buyer: 'Buyer Two',
+        email: 'two@example.com',
+        eventName: 'Event',
+        eventId: 'event-1',
+        eventCode: 'EVT1234',
+        ticket: 'General',
+        amountCents: 5000,
+        status: 'Paid',
+        paidAt: DateTime.parse('2026-10-14T15:00:00Z'),
+      ),
+      Order(
+        id: 'refunded',
+        number: 'A-3',
+        buyer: 'Buyer Three',
+        email: 'three@example.com',
+        eventName: 'Event',
+        eventId: 'event-1',
+        eventCode: 'EVT1234',
+        ticket: 'General',
+        amountCents: 9000,
+        status: 'Refunded',
+        paidAt: DateTime.parse('2026-10-14T16:30:00Z'),
+      ),
+      Order(
+        id: 'prior-month',
+        number: 'A-4',
+        buyer: 'Buyer Four',
+        email: 'four@example.com',
+        eventName: 'Event',
+        eventId: 'event-1',
+        eventCode: 'EVT1234',
+        ticket: 'General',
+        amountCents: 3000,
+        status: 'Paid',
+        paidAt: DateTime.parse('2026-09-30T15:30:00Z'),
+      ),
+    ];
+    final now = DateTime.parse('2026-10-15T12:00:00Z');
+
+    final day = buildRevenueBuckets(
+      orders: orders,
+      period: RevenuePeriod.day,
+      now: now,
+    );
+    expect(day, hasLength(24));
+    expect(day[0].amountCents, 12500);
+    expect(day.fold<int>(0, (sum, bucket) => sum + bucket.amountCents), 12500);
+
+    final week = buildRevenueBuckets(
+      orders: orders,
+      period: RevenuePeriod.week,
+      now: now,
+    );
+    expect(week, hasLength(7));
+    expect(week.fold<int>(0, (sum, bucket) => sum + bucket.amountCents), 17500);
+
+    final month = buildRevenueBuckets(
+      orders: orders,
+      period: RevenuePeriod.month,
+      now: now,
+    );
+    expect(month.length, greaterThanOrEqualTo(4));
+    expect(
+      month.fold<int>(0, (sum, bucket) => sum + bucket.amountCents),
+      17500,
+    );
   });
 
   test('authenticated 401 clears the token and notifies the app', () async {
