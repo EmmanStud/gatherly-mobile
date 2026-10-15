@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _hidePassword = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
   static const purple = Color(0xFF756FB8);
   static const darkText = Color(0xFF303342);
@@ -43,7 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final state = AppScope.of(context);
       final result = await state.api.login(
@@ -52,10 +55,18 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       state.signIn(result.user);
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true)
-          .pushNamedAndRemoveUntil('/dashboard', (route) => false);
-    } catch (error) {
-      if (mounted) showToast(context, error.toString());
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).pushNamedAndRemoveUntil('/dashboard', (route) => false);
+    } on GatherlyApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _errorMessage = 'Something went wrong. Please try again.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -107,12 +118,16 @@ class _LoginScreenState extends State<LoginScreen> {
             keyboardType: TextInputType.emailAddress,
             style: const TextStyle(fontSize: 12),
             decoration: _inputDecoration('Enter your email address'),
+            onChanged: (_) {
+              if (_errorMessage != null) setState(() => _errorMessage = null);
+            },
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return 'Please enter your email address.';
               }
-              if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-                  .hasMatch(value.trim())) {
+              if (!RegExp(
+                r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+              ).hasMatch(value.trim())) {
                 return 'Please enter a valid email address.';
               }
               return null;
@@ -146,6 +161,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
               ),
             ),
+            onChanged: (_) {
+              if (_errorMessage != null) setState(() => _errorMessage = null);
+            },
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Please enter your password.';
@@ -164,6 +182,36 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           const SizedBox(height: 6),
+          if (_errorMessage != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEEEE),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: Color(0xFFB3261E),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFB3261E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             height: 43,
             child: ElevatedButton(
@@ -187,7 +235,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     )
                   : const Text(
                       'Sign in securely',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
             ),
           ),
@@ -229,10 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return InputDecoration(
       hintText: hint,
       hintStyle: const TextStyle(fontSize: 11, color: Color(0xFFB0B0BA)),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 12,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: Color(0xFFE7E7EC)),
@@ -277,10 +325,7 @@ class _LoginScreenState extends State<LoginScreen> {
 enum _PasswordResetStep { email, code, password }
 
 class _PasswordResetDialog extends StatefulWidget {
-  const _PasswordResetDialog({
-    required this.api,
-    required this.initialEmail,
-  });
+  const _PasswordResetDialog({required this.api, required this.initialEmail});
 
   final GatherlyApi api;
   final String initialEmail;
@@ -450,24 +495,33 @@ class _PasswordResetDialogState extends State<_PasswordResetDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_step == _PasswordResetStep.email) ...[
-                  const Text('Enter your account email to receive a recovery code.'),
+                  const Text(
+                    'Enter your account email to receive a recovery code.',
+                  ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email address'),
+                    decoration: const InputDecoration(
+                      labelText: 'Email address',
+                    ),
                     validator: emailField,
                   ),
                 ],
                 if (_step == _PasswordResetStep.code) ...[
-                  Text('Enter the recovery code sent to ${_email.text.trim()}.'),
+                  Text(
+                    'Enter the recovery code sent to ${_email.text.trim()}.',
+                  ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _code,
                     keyboardType: TextInputType.number,
                     maxLength: 6,
-                    decoration: const InputDecoration(labelText: 'Six-digit recovery code'),
-                    validator: (value) => value == null || !RegExp(r'^\d{6}$').hasMatch(value)
+                    decoration: const InputDecoration(
+                      labelText: 'Six-digit recovery code',
+                    ),
+                    validator: (value) =>
+                        value == null || !RegExp(r'^\d{6}$').hasMatch(value)
                         ? 'Enter the six-digit recovery code.'
                         : null,
                   ),
@@ -478,18 +532,24 @@ class _PasswordResetDialogState extends State<_PasswordResetDialog> {
                   TextFormField(
                     controller: _newPassword,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'New password'),
+                    decoration: const InputDecoration(
+                      labelText: 'New password',
+                    ),
                     validator: passwordField,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _confirmPassword,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Confirm new password'),
+                    decoration: const InputDecoration(
+                      labelText: 'Confirm new password',
+                    ),
                     validator: (value) {
                       final error = passwordField(value);
                       if (error != null) return error;
-                      return value != _newPassword.text ? 'Passwords do not match.' : null;
+                      return value != _newPassword.text
+                          ? 'Passwords do not match.'
+                          : null;
                     },
                   ),
                 ],
@@ -499,7 +559,12 @@ class _PasswordResetDialogState extends State<_PasswordResetDialog> {
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 8),
-                  Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -514,7 +579,11 @@ class _PasswordResetDialogState extends State<_PasswordResetDialog> {
         if (_step == _PasswordResetStep.code)
           TextButton(
             onPressed: _busy || _resendSeconds > 0 ? null : _resendCode,
-            child: Text(_resendSeconds > 0 ? 'Resend in ${_resendSeconds}s' : 'Resend code'),
+            child: Text(
+              _resendSeconds > 0
+                  ? 'Resend in ${_resendSeconds}s'
+                  : 'Resend code',
+            ),
           ),
         FilledButton(
           onPressed: _busy

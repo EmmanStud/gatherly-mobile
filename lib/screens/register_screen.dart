@@ -30,6 +30,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _hidePassword = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
   static const purple = Color(0xFF756FB8);
   static const darkText = Color(0xFF303342);
@@ -46,7 +47,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final state = AppScope.of(context);
       final name = _nameController.text.trim();
@@ -97,8 +101,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
           context,
         ).pushNamedAndRemoveUntil('/dashboard', (route) => false);
       }
-    } catch (error) {
-      if (mounted) showToast(context, error.toString());
+    } on GatherlyApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -163,6 +171,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             textCapitalization: TextCapitalization.words,
             style: const TextStyle(fontSize: 12),
             decoration: _inputDecoration('Enter your full name'),
+            onChanged: (_) {
+              if (_errorMessage != null) setState(() => _errorMessage = null);
+            },
             validator: (value) => requiredField(value) == null
                 ? null
                 : 'Please enter your full name.',
@@ -176,6 +187,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             keyboardType: TextInputType.emailAddress,
             style: const TextStyle(fontSize: 12),
             decoration: _inputDecoration('Enter your email address'),
+            onChanged: (_) {
+              if (_errorMessage != null) setState(() => _errorMessage = null);
+            },
             validator: emailField,
           ),
           const SizedBox(height: 15),
@@ -203,10 +217,43 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     },
                   ),
                 ),
+            onChanged: (_) {
+              if (_errorMessage != null) setState(() => _errorMessage = null);
+            },
             validator: passwordField,
           ),
           const SizedBox(height: 22),
 
+          if (_errorMessage != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFEEEE),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 16,
+                    color: Color(0xFFB3261E),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFB3261E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             height: 43,
             child: ElevatedButton(
