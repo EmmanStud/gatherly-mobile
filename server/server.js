@@ -551,6 +551,65 @@ app.get("/api/auth/session", asyncRoute(async (req, res) => {
 
 app.post("/api/auth/logout", (req, res) => res.status(204).end());
 
+app.patch("/api/auth/profile", requireAuth, asyncRoute(async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  if (!validString(name, 100)) {
+    return res.status(400).json({ error: "Enter a name up to 100 characters." });
+  }
+
+  const collection = req.accountType === "admin" ? "admin_accounts" : "customer_accounts";
+  const result = await req.db.collection(collection).findOneAndUpdate(
+    { _id: objectId(req.userId) },
+    { $set: { name } },
+    { returnDocument: "after", projection: { name: 1, email: 1 } },
+  );
+  if (!result) {
+    return res.status(404).json({ error: "Your account could not be found." });
+  }
+
+  res.json({ user: { name: result.name, email: result.email, accountType: req.accountType } });
+}));
+
+app.post("/api/auth/change-password", requireAuth, asyncRoute(async (req, res) => {
+  const { currentPassword, newPassword, confirmNewPassword } = req.body || {};
+  if (typeof currentPassword !== "string" || !currentPassword
+    || typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 128
+    || !hasValidPasswordComplexity(newPassword)
+    || typeof confirmNewPassword !== "string" || newPassword !== confirmNewPassword) {
+    return res.status(400).json({
+      error: "Confirm the new password exactly. New passwords must be 8–128 characters and include uppercase, lowercase, a digit, and a supported special character.",
+    });
+  }
+
+  const collection = req.accountType === "admin" ? "admin_accounts" : "customer_accounts";
+  const account = await req.db.collection(collection).findOne(
+    { _id: objectId(req.userId) },
+    { projection: { passwordHash: 1, passwordSalt: 1 } },
+  );
+  if (!account) {
+    return res.status(404).json({ error: "Your account could not be found." });
+  }
+  if (!await verifyPassword(currentPassword, account)) {
+    return res.status(401).json({ error: "Your current password is incorrect." });
+  }
+  if (await verifyPassword(newPassword, account)) {
+    return res.status(400).json({
+      error: "Your new password must be different from your current password.",
+    });
+  }
+
+  const update = await req.db.collection(collection).updateOne(
+    { _id: objectId(req.userId), passwordHash: account.passwordHash, passwordSalt: account.passwordSalt },
+    { $set: await hashPassword(newPassword), $unset: { mustChangePassword: "" } },
+  );
+  if (update.matchedCount !== 1) {
+    return res.status(409).json({
+      error: "Your password changed during this request. Please try again.",
+    });
+  }
+  res.json({ message: "Password changed successfully." });
+}));
+
 app.post("/api/auth/password-reset/send", asyncRoute(async (req, res) => {
   const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
   if (!isValidEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
