@@ -5,6 +5,7 @@ import '../core/format.dart';
 import '../models/models.dart';
 import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
+import '../widgets/venue_autocomplete_field.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key, this.event});
@@ -423,11 +424,11 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  _textField(
+                  _label('Venue in the Philippines'),
+                  VenueAutocompleteField(
                     controller: _venue,
-                    label: 'Venue',
-                    hint: 'Venue or online link',
-                    max: 200,
+                    initiallySelected: _editing,
+                    onChanged: () => setState(() => _errorMessage = null),
                   ),
                   const SizedBox(height: 16),
                   _textField(

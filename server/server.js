@@ -20,6 +20,7 @@ const verificationMaxAttempts = 5;
 const passwordResetLifetimeMs = 10 * 60 * 1000;
 const eventCodeCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const publicAppUrl = process.env.PUBLIC_APP_URL || "http://127.0.0.1:5173";
+const geoapifyApiKey = process.env.GEOAPIFY_API_KEY;
 const corsOrigins = new Set(
   (process.env.CORS_ORIGINS || "")
     .split(",")
@@ -797,6 +798,42 @@ app.post("/api/auth/password-reset/complete", asyncRoute(async (req, res) => {
   }
   await resets.deleteOne({ _id: reset._id });
   res.json({ message: "Password reset successfully. You can now sign in with your new password." });
+}));
+
+app.get("/api/places/autocomplete", requireAuth, asyncRoute(async (req, res) => {
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (query.length < 3 || query.length > 200) {
+    return res.json({ suggestions: [] });
+  }
+  if (!geoapifyApiKey) {
+    return res.status(503).json({ error: "Venue suggestions are unavailable. Configure GEOAPIFY_API_KEY on the server." });
+  }
+  const url = new URL("https://api.geoapify.com/v1/geocode/autocomplete");
+  url.searchParams.set("text", query);
+  url.searchParams.set("filter", "countrycode:ph");
+  url.searchParams.set("limit", "6");
+  url.searchParams.set("apiKey", geoapifyApiKey);
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  } catch (error) {
+    console.error("Geoapify venue autocomplete request failed:", error);
+    return res.status(502).json({ error: "Venue suggestions could not be reached. Please try again." });
+  }
+  if (!response.ok) {
+    console.error(`Geoapify venue autocomplete returned HTTP ${response.status}.`);
+    return res.status(502).json({ error: "Venue suggestions are temporarily unavailable. Please try again." });
+  }
+  const data = await response.json();
+  const suggestions = Array.isArray(data.features)
+    ? data.features
+      .filter((f) => f.properties?.country_code?.toLowerCase() === "ph"
+        && typeof f.properties.formatted === "string")
+      .map((f) => f.properties.formatted)
+      .filter((v, i, arr) => arr.indexOf(v) === i)
+      .slice(0, 6)
+    : [];
+  return res.json({ suggestions });
 }));
 
 app.get("/api/events", requireAuth, asyncRoute(async (req, res) => {

@@ -224,6 +224,17 @@ class GatherlyApi {
   Future<List<Event>> getEvents() async =>
       _list(await _request('GET', '/events', authenticated: true), Event.fromJson);
 
+  Future<List<String>> venueSuggestions(String query) async {
+    final response = await _request(
+      'GET',
+      '/places/autocomplete?q=${Uri.encodeQueryComponent(query)}',
+      authenticated: true,
+    );
+    final list = response['suggestions'];
+    if (list is! List) return const [];
+    return list.whereType<String>().toList();
+  }
+
   Future<Event> createEvent(Event event) async =>
       Event.fromJson(await _request(
         'POST',
