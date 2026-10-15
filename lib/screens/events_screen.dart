@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/format.dart';
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 import 'create_event_screen.dart';
@@ -18,7 +19,7 @@ class EventsPanel extends StatefulWidget {
 
 class _EventsPanelState extends State<EventsPanel> {
   static const int _pageSize = 3;
-  static const List<String> _filters = ['All events', 'On sale', 'Draft'];
+  static const List<String> _filters = ['All events', 'On sale', 'Draft', 'Archive'];
 
   String _search = '';
   String _filter = 'All events';
@@ -30,7 +31,11 @@ class _EventsPanelState extends State<EventsPanel> {
       final matchesSearch = query.isEmpty ||
           event.name.toLowerCase().contains(query) ||
           event.venue.toLowerCase().contains(query);
-      final matchesFilter = _filter == 'All events' || event.status.label == _filter;
+      final matchesFilter = switch (_filter) {
+        'Archive' => event.status == EventStatus.finished || event.status == EventStatus.cancelled,
+        'All events' => true,
+        _ => event.status.label == _filter,
+      };
       return matchesSearch && matchesFilter;
     }).toList();
   }
@@ -52,7 +57,19 @@ class _EventsPanelState extends State<EventsPanel> {
       destructive: true,
     );
     if (!ok || !mounted) return;
-    state.deleteEvent(event.id);
+    try {
+      await state.deleteEvent(event.id);
+    } catch (error) {
+      if (mounted) showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Could not delete event'),
+          content: Text(error is GatherlyApiException ? error.message : 'Please try again.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
     setState(() => _page = 1);
     showToast(context, 'Event deleted.');
   }
@@ -81,6 +98,19 @@ class _EventsPanelState extends State<EventsPanel> {
           children: [
             _header(wide),
             const Divider(height: 1, color: AppColors.border),
+            if (state.dataError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(children: [
+                  Expanded(child: Text(state.dataError!, style: const TextStyle(color: AppColors.danger))),
+                  TextButton(onPressed: state.loadOrganizerData, child: const Text('Retry')),
+                ]),
+              ),
+            if (state.isLoadingData && state.events.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              ),
             if (wide) _columnTitles(),
             for (final event in paged)
               _EventRow(
@@ -336,24 +366,26 @@ class _EventRow extends StatelessWidget {
   Widget get _actions => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextButton(
-            onPressed: onEdit,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              minimumSize: const Size(48, 36),
-              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          if (event.status == EventStatus.draft || event.status == EventStatus.onSale)
+            TextButton(
+              onPressed: onEdit,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                minimumSize: const Size(48, 36),
+                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+              child: const Text('Edit'),
             ),
-            child: const Text('Edit'),
-          ),
-          TextButton(
-            onPressed: onDelete,
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.danger,
-              minimumSize: const Size(48, 36),
-              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+          if (event.status == EventStatus.draft)
+            TextButton(
+              onPressed: onDelete,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                minimumSize: const Size(48, 36),
+                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              ),
+              child: const Text('Delete'),
             ),
-            child: const Text('Delete'),
-          ),
         ],
       );
 

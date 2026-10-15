@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/app_colors.dart';
 import '../core/assets.dart';
 import '../core/format.dart';
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 import 'create_event_screen.dart';
@@ -12,7 +14,7 @@ import 'create_event_screen.dart';
 class EventDetailsScreen extends StatelessWidget {
   const EventDetailsScreen({super.key, required this.eventId});
 
-  final int eventId;
+  final String eventId;
 
   Future<void> _edit(BuildContext context, Event event) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -33,18 +35,68 @@ class EventDetailsScreen extends StatelessWidget {
       destructive: true,
     );
     if (!ok) return;
-    state.deleteEvent(event.id);
-    navigator.pop();
-    showToastOn(messenger, 'Event deleted.');
+    try {
+      await state.deleteEvent(event.id);
+      navigator.pop();
+      showToastOn(messenger, 'Event deleted.');
+    } catch (error) {
+      _showError(context, error);
+    }
   }
 
-  void _togglePublish(BuildContext context, AppState state, Event event) {
-    final publishing = event.status == EventStatus.draft;
-    state.setEventStatus(
-      event.id,
-      publishing ? EventStatus.onSale : EventStatus.draft,
+  Future<void> _publish(BuildContext context, AppState state, Event event) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'Publish this event?',
+      message: 'Guests will be able to register using its event link.',
+      confirmLabel: 'Publish',
     );
-    showToast(context, publishing ? 'Event published. Tickets are on sale.' : 'Event moved back to draft.');
+    if (ok) await _run(context, () => state.publishEvent(event.id), 'Event published.');
+  }
+
+  Future<void> _cancel(BuildContext context, AppState state, Event event) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'Cancel this event?',
+      message: 'The event will be marked as cancelled.',
+      confirmLabel: 'Cancel event',
+      destructive: true,
+    );
+    if (ok) await _run(context, () => state.cancelEvent(event.id), 'Event cancelled.');
+  }
+
+  Future<void> _finish(BuildContext context, AppState state, Event event) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'Mark this event finished?',
+      message: 'This is only available after the event ends.',
+      confirmLabel: 'Finish event',
+    );
+    if (ok) await _run(context, () => state.finishEvent(event.id), 'Event marked as finished.');
+  }
+
+  Future<void> _run(
+    BuildContext context,
+    Future<void> Function() action,
+    String success,
+  ) async {
+    try {
+      await action();
+      if (context.mounted) showToast(context, success);
+    } catch (error) {
+      if (context.mounted) _showError(context, error);
+    }
+  }
+
+  void _showError(BuildContext context, Object error) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Could not update event'),
+        content: Text(error is GatherlyApiException ? error.message : 'Please try again.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+      ),
+    );
   }
 
   @override
@@ -115,10 +167,29 @@ class EventDetailsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   _DetailLine(Icons.calendar_today_outlined, formatDate(event.startAt)),
+                  if (event.multipleDay)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _DetailLine(
+                        Icons.event_available_outlined,
+                        'Through ${formatDate(DateTime.tryParse(event.endDate) ?? event.startAt)}',
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   _DetailLine(Icons.schedule, formatTime(event.startAt)),
                   const SizedBox(height: 8),
                   _DetailLine(Icons.location_on_outlined, event.venue),
+                  if (event.category.isNotEmpty || event.headliner.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      [event.category, event.headliner].where((value) => value.isNotEmpty).join(' · '),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                  if (event.description.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(event.description, style: const TextStyle(fontSize: 14, height: 1.5)),
+                  ],
                   const SizedBox(height: 24),
                   Panel(
                     child: Column(
@@ -149,35 +220,69 @@ class EventDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+                  if (onSale && event.registrationUrl.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    SelectableText(event.registrationUrl),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: event.registrationUrl));
+                          if (context.mounted) showToast(context, 'Registration link copied.');
+                        },
+                        icon: const Icon(Icons.copy, size: 16),
+                        label: const Text('Copy registration link'),
+                      ),
+                    ),
+                  ],
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: [
-                      FilledButton.icon(
-                        onPressed: () => _edit(context, event),
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        label: const Text('Edit event'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => _togglePublish(context, state, event),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.ink,
-                          minimumSize: const Size(0, 48),
-                          side: const BorderSide(color: Color(0x1A000000)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      if (event.status == EventStatus.draft || onSale)
+                        FilledButton.icon(
+                          onPressed: () => _edit(context, event),
+                          icon: const Icon(Icons.edit_outlined, size: 18),
+                          label: const Text('Edit event'),
                         ),
-                        icon: Icon(onSale ? Icons.visibility_off_outlined : Icons.rocket_launch_outlined, size: 18),
-                        label: Text(onSale ? 'Move to draft' : 'Publish event'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _delete(context, state, event),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.danger,
-                          minimumSize: const Size(0, 48),
+                      if (event.status == EventStatus.draft)
+                        OutlinedButton.icon(
+                          onPressed: () => _publish(context, state, event),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.ink,
+                            minimumSize: const Size(0, 48),
+                            side: const BorderSide(color: Color(0x1A000000)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          icon: const Icon(Icons.rocket_launch_outlined, size: 18),
+                          label: const Text('Publish event'),
                         ),
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Delete'),
-                      ),
+                      if (event.status == EventStatus.onSale)
+                        OutlinedButton.icon(
+                          onPressed: () => _finish(context, state, event),
+                          icon: const Icon(Icons.check_circle_outline, size: 18),
+                          label: const Text('Finish event'),
+                        ),
+                      if (event.status == EventStatus.draft || onSale)
+                        TextButton.icon(
+                          onPressed: () => _cancel(context, state, event),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            minimumSize: const Size(0, 48),
+                          ),
+                          icon: const Icon(Icons.cancel_outlined, size: 18),
+                          label: const Text('Cancel event'),
+                        ),
+                      if (event.status == EventStatus.draft)
+                        TextButton.icon(
+                          onPressed: () => _delete(context, state, event),
+                          style: TextButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            minimumSize: const Size(0, 48),
+                          ),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Delete'),
+                        ),
                     ],
                   ),
                 ],
