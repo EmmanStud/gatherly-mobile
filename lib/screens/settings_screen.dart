@@ -32,9 +32,23 @@ class SettingsPanel extends StatelessWidget {
     final state = AppScope.of(context);
     final prefs = state.preferences;
 
-    void change(Preferences next, String message) {
-      state.updatePreferences(next);
-      showToast(context, message);
+    Future<void> change(Preferences next) async {
+      try {
+        await state.updatePreferences(next);
+        if (context.mounted) showToast(context, 'Preference saved on this device only.');
+      } catch (error) {
+        if (!context.mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Could not save preference'),
+            content: Text('This device could not save the setting: $error'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            ],
+          ),
+        );
+      }
     }
 
     final notifications = Panel(
@@ -42,27 +56,27 @@ class SettingsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const PanelTitle('Notifications', 'Control the updates sent to your account.'),
+          const PanelTitle('Notifications', 'Local preferences on this device; no email notifications are sent.'),
           const SizedBox(height: 16),
           _setting(
             'Order confirmations',
-            'Email me whenever a guest completes an order.',
+            'Local preference only; order confirmation emails are not configured here.',
             prefs.orderEmails,
-            (v) => change(prefs.copyWith(orderEmails: v), 'Notification preference updated.'),
+            (v) => change(prefs.copyWith(orderEmails: v)),
           ),
           const Divider(height: 1, color: AppColors.border),
           _setting(
             'Event reminders',
-            'Remind me before ticket sales and events begin.',
+            'Local preference only; reminders are not sent by the app.',
             prefs.eventReminders,
-            (v) => change(prefs.copyWith(eventReminders: v), 'Notification preference updated.'),
+            (v) => change(prefs.copyWith(eventReminders: v)),
           ),
           const Divider(height: 1, color: AppColors.border),
           _setting(
             'Weekly performance summary',
-            'Send a Monday recap of ticket sales and attendance.',
+            'Local preference only; no weekly summary is sent.',
             prefs.weeklySummary,
-            (v) => change(prefs.copyWith(weeklySummary: v), 'Notification preference updated.'),
+            (v) => change(prefs.copyWith(weeklySummary: v)),
           ),
         ],
       ),
@@ -98,12 +112,12 @@ class SettingsPanel extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Two-factor authentication',
+                        'Two-factor authentication reminder',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Require a verification code when signing in.',
+                        'Local reminder only; this does not change sign-in security.',
                         style: TextStyle(fontSize: 12, height: 1.4, color: AppColors.muted),
                       ),
                     ],
@@ -111,10 +125,7 @@ class SettingsPanel extends StatelessWidget {
                 ),
                 Switch(
                   value: prefs.twoFactor,
-                  onChanged: (v) => change(
-                    prefs.copyWith(twoFactor: v),
-                    v ? 'Two-factor authentication enabled.' : 'Two-factor authentication disabled.',
-                  ),
+                  onChanged: (v) => change(prefs.copyWith(twoFactor: v)),
                 ),
               ],
             ),

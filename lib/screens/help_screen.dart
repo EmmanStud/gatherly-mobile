@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_colors.dart';
 import '../widgets/common.dart';
@@ -40,6 +41,34 @@ class _HelpCenterPanelState extends State<HelpCenterPanel> {
   final _message = TextEditingController();
   String _query = '';
   String _topic = _topics.first;
+  String? _draftStatus;
+
+  static const _draftMessageKey = 'gatherly_support_draft_message';
+  static const _draftTopicKey = 'gatherly_support_draft_topic';
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreDraft();
+  }
+
+  Future<void> _restoreDraft() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final savedMessage = preferences.getString(_draftMessageKey);
+    final savedTopic = preferences.getString(_draftTopicKey);
+    setState(() {
+      if (_message.text.isEmpty && savedMessage != null) {
+        _message.text = savedMessage;
+      }
+      if (savedTopic != null && _topics.contains(savedTopic)) {
+        _topic = savedTopic;
+      }
+      if (savedMessage?.isNotEmpty == true) {
+        _draftStatus = 'Draft restored from this device. It has not been sent.';
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -47,14 +76,25 @@ class _HelpCenterPanelState extends State<HelpCenterPanel> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _saveDraft() async {
     if (_message.text.trim().isEmpty) {
-      showToast(context, 'Please enter a message.');
+      setState(() => _draftStatus = 'Enter a message before saving a draft.');
       return;
     }
-    _message.clear();
     FocusScope.of(context).unfocus();
-    showToast(context, 'Support request sent. We’ll reply by email.');
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString(_draftMessageKey, _message.text.trim());
+      await preferences.setString(_draftTopicKey, _topic);
+      if (mounted) {
+        setState(() => _draftStatus =
+            'Draft saved on this device only. Support requests are not sent by the app.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _draftStatus = 'Could not save the draft on this device.');
+      }
+    }
   }
 
   @override
@@ -142,8 +182,13 @@ class _HelpCenterPanelState extends State<HelpCenterPanel> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Send a message to the Gatherly support team.',
+            'Prepare a message for the Gatherly support team.',
             style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.5),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Support requests are not connected in this app. You can save a draft on this device, but it will not be sent.',
+            style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.5),
           ),
           const SizedBox(height: 22),
           const Text('Topic', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
@@ -166,15 +211,19 @@ class _HelpCenterPanelState extends State<HelpCenterPanel> {
             maxLines: 4,
             decoration: const InputDecoration(hintText: 'Tell us what you need help with...'),
           ),
+          if (_draftStatus != null) ...[
+            const SizedBox(height: 10),
+            Text(_draftStatus!, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          ],
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _send,
+            onPressed: _saveDraft,
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.yellow,
               foregroundColor: AppColors.ink,
               textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
             ),
-            child: const Text('Send request'),
+            child: const Text('Save draft on this device'),
           ),
         ],
       ),

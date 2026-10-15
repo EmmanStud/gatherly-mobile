@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/models.dart';
 import '../services/gatherly_api.dart';
@@ -14,6 +17,7 @@ class AppState extends ChangeNotifier {
   bool _isLoadingData = false;
   String? _sessionRestoreError;
   String? _dataError;
+  static const _preferencesKey = 'gatherly_local_preferences';
   void Function()? onSessionExpired;
   List<Event> _events = [];
   List<Order> _orders = [];
@@ -39,6 +43,13 @@ class AppState extends ChangeNotifier {
     _sessionRestoreError = null;
     notifyListeners();
     try {
+      final preferencesStore = await SharedPreferences.getInstance();
+      final savedPreferences = preferencesStore.getString(_preferencesKey);
+      if (savedPreferences != null) {
+        _preferences = Preferences.fromJson(
+          Map<String, dynamic>.from(jsonDecode(savedPreferences) as Map),
+        );
+      }
       final user = await _api.currentUser();
       if (user != null) {
         _setUser(user);
@@ -213,9 +224,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePreferences(Preferences preferences) {
+  Future<void> updatePreferences(Preferences preferences) async {
     _preferences = preferences;
     notifyListeners();
+    final store = await SharedPreferences.getInstance();
+    await store.setString(_preferencesKey, jsonEncode(preferences.toJson()));
   }
 }
 
