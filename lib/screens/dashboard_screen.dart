@@ -99,10 +99,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onProfile: () => _select('Profile'),
                   ),
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: RefreshIndicator(
+                      onRefresh: AppScope.of(context).loadOrganizerData,
+                      child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: EdgeInsets.symmetric(
                         horizontal: wide ? 40 : 16,
                         vertical: wide ? 36 : 24,
+                      ),
                       ),
                       child: Center(
                         child: ConstrainedBox(
@@ -675,8 +679,8 @@ class _Metrics extends StatelessWidget {
     final tiles = [
       _Kpi(
         'Total revenue',
-        formatPeso(state.demoRevenueCentavos),
-        '+12.4%',
+        formatPeso(state.revenueCents),
+        '${state.paidOrderCount} paid orders',
         Icons.bar_chart_rounded,
         AppColors.kpiPurpleBg,
         AppColors.primary,
@@ -684,15 +688,15 @@ class _Metrics extends StatelessWidget {
       _Kpi(
         'Tickets sold',
         groupThousands(state.ticketsSold),
-        '+8.2%',
+        '${state.events.length} events',
         Icons.confirmation_number_outlined,
         AppColors.kpiBlueBg,
         AppColors.kpiBlue,
       ),
       _Kpi(
         'Total attendees',
-        groupThousands(state.demoAttendeeCount),
-        '+16.8%',
+        groupThousands(state.attendees.length),
+        '${state.checkedInCount} checked in',
         Icons.people_outline,
         AppColors.kpiGreenBg,
         AppColors.kpiGreen,
