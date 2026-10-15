@@ -62,7 +62,7 @@ class _OrdersPanelState extends State<OrdersPanel> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: DropdownButtonFormField<String?>(
-              value: _eventFilter,
+              initialValue: _eventFilter,
               decoration: const InputDecoration(labelText: 'Filter by event'),
               items: [
                 const DropdownMenuItem<String?>(value: null, child: Text('All events')),

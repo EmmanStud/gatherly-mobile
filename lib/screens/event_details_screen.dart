@@ -34,13 +34,13 @@ class EventDetailsScreen extends StatelessWidget {
       confirmLabel: 'Delete',
       destructive: true,
     );
-    if (!ok) return;
+    if (!ok || !context.mounted) return;
     try {
       await state.deleteEvent(event.id);
       navigator.pop();
       showToastOn(messenger, 'Event deleted.');
     } catch (error) {
-      _showError(context, error);
+      if (context.mounted) _showError(context, error);
     }
   }
 
@@ -51,7 +51,9 @@ class EventDetailsScreen extends StatelessWidget {
       message: 'Guests will be able to register using its event link.',
       confirmLabel: 'Publish',
     );
-    if (ok) await _run(context, () => state.publishEvent(event.id), 'Event published.');
+    if (ok && context.mounted) {
+      await _run(context, () => state.publishEvent(event.id), 'Event published.');
+    }
   }
 
   Future<void> _cancel(BuildContext context, AppState state, Event event) async {
@@ -62,7 +64,9 @@ class EventDetailsScreen extends StatelessWidget {
       confirmLabel: 'Cancel event',
       destructive: true,
     );
-    if (ok) await _run(context, () => state.cancelEvent(event.id), 'Event cancelled.');
+    if (ok && context.mounted) {
+      await _run(context, () => state.cancelEvent(event.id), 'Event cancelled.');
+    }
   }
 
   Future<void> _finish(BuildContext context, AppState state, Event event) async {
@@ -72,7 +76,9 @@ class EventDetailsScreen extends StatelessWidget {
       message: 'This is only available after the event ends.',
       confirmLabel: 'Finish event',
     );
-    if (ok) await _run(context, () => state.finishEvent(event.id), 'Event marked as finished.');
+    if (ok && context.mounted) {
+      await _run(context, () => state.finishEvent(event.id), 'Event marked as finished.');
+    }
   }
 
   Future<void> _run(

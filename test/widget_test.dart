@@ -165,6 +165,53 @@ void main() {
     api.close();
   });
 
+  test('organizer list endpoints decode top-level arrays', () async {
+    SharedPreferences.setMockInitialValues({
+      'gatherly_session_token': 'organizer-test-token',
+    });
+    late http.Request request;
+    final api = GatherlyApi(
+      client: MockClient((incoming) async {
+        request = incoming;
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 'event-1',
+              'name': 'Gatherly Meetup',
+              'date': '2026-10-20',
+              'time': '18:30',
+              'multipleDay': false,
+              'endDate': '',
+              'venue': 'Manila',
+              'description': 'A meetup',
+              'category': 'Community',
+              'headliner': 'Gatherly',
+              'total': 100,
+              'sold': 12,
+              'eventCode': 'ABC1234',
+              'registrationUrl': 'https://example.com/events/ABC1234',
+              'pricingMode': 'free',
+              'priceCents': 0,
+              'ticketTypes': [],
+              'status': 'On sale',
+            },
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+      baseUrl: 'http://localhost:4000/api',
+    );
+
+    final events = await api.getEvents();
+    expect(events, hasLength(1));
+    expect(events.single.id, 'event-1');
+    expect(events.single.status, EventStatus.onSale);
+    expect(request.url.path, '/api/events');
+    expect(request.headers['Authorization'], startsWith('Bearer '));
+    api.close();
+  });
+
   test('authenticated 401 clears the token and notifies the app', () async {
     SharedPreferences.setMockInitialValues({
       'gatherly_session_token': 'expired-token',

@@ -102,25 +102,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: RefreshIndicator(
                       onRefresh: AppScope.of(context).loadOrganizerData,
                       child: SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: wide ? 40 : 16,
-                        vertical: wide ? 36 : 24,
-                      ),
-                      ),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1500),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _PageHeading(
-                                active: _active,
-                                onCreate: _createEvent,
-                              ),
-                              const SizedBox(height: 28),
-                              _buildPage(),
-                            ],
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: wide ? 40 : 16,
+                          vertical: wide ? 36 : 24,
+                        ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1500),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _PageHeading(
+                                  active: _active,
+                                  onCreate: _createEvent,
+                                ),
+                                const SizedBox(height: 28),
+                                _buildPage(),
+                              ],
+                            ),
                           ),
                         ),
                       ),

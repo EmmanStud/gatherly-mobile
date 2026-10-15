@@ -51,10 +51,11 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
               'Attendee check-in',
               '${state.checkedInCount} of ${attendees.length} guests checked in.',
             ),
-            Padding(
+          ),
+          Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: DropdownButtonFormField<String?>(
-                value: _eventFilter,
+                initialValue: _eventFilter,
                 decoration: const InputDecoration(labelText: 'Filter by event'),
                 items: [
                   const DropdownMenuItem<String?>(value: null, child: Text('All events')),
@@ -74,7 +75,6 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
               ),
             if (state.isLoadingData && attendees.isEmpty)
               const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
-          ),
           if (attendees.isEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 16, 24, 48),

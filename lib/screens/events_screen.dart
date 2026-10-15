@@ -19,7 +19,12 @@ class EventsPanel extends StatefulWidget {
 
 class _EventsPanelState extends State<EventsPanel> {
   static const int _pageSize = 3;
-  static const List<String> _filters = ['All events', 'On sale', 'Draft', 'Archive'];
+  static const List<String> _filters = [
+    'All events',
+    'On sale',
+    'Draft',
+    'Archive',
+  ];
 
   String _search = '';
   String _filter = 'All events';
@@ -28,11 +33,14 @@ class _EventsPanelState extends State<EventsPanel> {
   List<Event> _applyFilters(List<Event> all) {
     final query = _search.trim().toLowerCase();
     return all.where((event) {
-      final matchesSearch = query.isEmpty ||
+      final matchesSearch =
+          query.isEmpty ||
           event.name.toLowerCase().contains(query) ||
           event.venue.toLowerCase().contains(query);
       final matchesFilter = switch (_filter) {
-        'Archive' => event.status == EventStatus.finished || event.status == EventStatus.cancelled,
+        'Archive' =>
+          event.status == EventStatus.finished ||
+              event.status == EventStatus.cancelled,
         'All events' => true,
         _ => event.status.label == _filter,
       };
@@ -60,16 +68,25 @@ class _EventsPanelState extends State<EventsPanel> {
     try {
       await state.deleteEvent(event.id);
     } catch (error) {
-      if (mounted) showDialog<void>(
+      if (!mounted) return;
+      showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Could not delete event'),
-          content: Text(error is GatherlyApiException ? error.message : 'Please try again.'),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+          content: Text(
+            error is GatherlyApiException ? error.message : 'Please try again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
         ),
       );
       return;
     }
+    if (!mounted) return;
     setState(() => _page = 1);
     showToast(context, 'Event deleted.');
   }
@@ -84,60 +101,77 @@ class _EventsPanelState extends State<EventsPanel> {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final filtered = _applyFilters(state.events);
-    final totalPages = filtered.isEmpty ? 1 : (filtered.length + _pageSize - 1) ~/ _pageSize;
+    final totalPages = filtered.isEmpty
+        ? 1
+        : (filtered.length + _pageSize - 1) ~/ _pageSize;
     final page = _page.clamp(1, totalPages);
     final start = (page - 1) * _pageSize;
     final paged = filtered.skip(start).take(_pageSize).toList();
 
     return Panel(
       padding: EdgeInsets.zero,
-      child: LayoutBuilder(builder: (context, box) {
-        final wide = box.maxWidth >= 760;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _header(wide),
-            const Divider(height: 1, color: AppColors.border),
-            if (state.dataError != null)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(children: [
-                  Expanded(child: Text(state.dataError!, style: const TextStyle(color: AppColors.danger))),
-                  TextButton(onPressed: state.loadOrganizerData, child: const Text('Retry')),
-                ]),
-              ),
-            if (state.isLoadingData && state.events.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            if (wide) _columnTitles(),
-            for (final event in paged)
-              _EventRow(
-                event: event,
-                wide: wide,
-                onOpen: () => _open(event),
-                onEdit: () => _edit(event),
-                onDelete: () => _delete(event),
-              ),
-            if (filtered.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 56),
-                child: Column(
-                  children: [
-                    Text('No events found', style: TextStyle(fontWeight: FontWeight.w800)),
-                    SizedBox(height: 4),
-                    Text(
-                      'Try another search or filter.',
-                      style: TextStyle(fontSize: 12, color: AppColors.muted),
-                    ),
-                  ],
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final wide = box.maxWidth >= 760;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _header(wide),
+              const Divider(height: 1, color: AppColors.border),
+              if (state.dataError != null)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          state.dataError!,
+                          style: const TextStyle(color: AppColors.danger),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: state.loadOrganizerData,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            _footer(filtered.length, start, page, totalPages),
-          ],
-        );
-      }),
+              if (state.isLoadingData && state.events.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              if (wide) _columnTitles(),
+              for (final event in paged)
+                _EventRow(
+                  event: event,
+                  wide: wide,
+                  onOpen: () => _open(event),
+                  onEdit: () => _edit(event),
+                  onDelete: () => _delete(event),
+                ),
+              if (filtered.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 56),
+                  child: Column(
+                    children: [
+                      Text(
+                        'No events found',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Try another search or filter.',
+                        style: TextStyle(fontSize: 12, color: AppColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              _footer(filtered.length, start, page, totalPages),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -166,8 +200,15 @@ class _EventsPanelState extends State<EventsPanel> {
         child: DropdownButton<String>(
           value: _filter,
           borderRadius: BorderRadius.circular(12),
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.ink),
-          items: [for (final f in _filters) DropdownMenuItem(value: f, child: Text(f))],
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.ink,
+          ),
+          items: [
+            for (final f in _filters)
+              DropdownMenuItem(value: f, child: Text(f)),
+          ],
           onChanged: (value) => setState(() {
             _filter = value ?? 'All events';
             _page = 1;
@@ -193,7 +234,13 @@ class _EventsPanelState extends State<EventsPanel> {
               children: [
                 title,
                 const SizedBox(height: 16),
-                Row(children: [Expanded(child: search), const SizedBox(width: 8), filter]),
+                Row(
+                  children: [
+                    Expanded(child: search),
+                    const SizedBox(width: 8),
+                    filter,
+                  ],
+                ),
               ],
             ),
     );
@@ -225,7 +272,9 @@ class _EventsPanelState extends State<EventsPanel> {
     final to = (start + _pageSize).clamp(0, total);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
       child: Row(
         children: [
           Expanded(
@@ -250,14 +299,20 @@ class _EventsPanelState extends State<EventsPanel> {
             ),
             child: Text(
               '$page',
-              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           const SizedBox(width: 4),
           _PagerButton(
             icon: Icons.chevron_right,
             tooltip: 'Next page',
-            onTap: page < totalPages ? () => setState(() => _page = page + 1) : null,
+            onTap: page < totalPages
+                ? () => setState(() => _page = page + 1)
+                : null,
           ),
         ],
       ),
@@ -266,7 +321,11 @@ class _EventsPanelState extends State<EventsPanel> {
 }
 
 class _PagerButton extends StatelessWidget {
-  const _PagerButton({required this.icon, required this.tooltip, required this.onTap});
+  const _PagerButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String tooltip;
@@ -312,46 +371,63 @@ class _EventRow extends StatelessWidget {
   final VoidCallback onDelete;
 
   Widget get _title => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        event.name,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+      ),
+      const SizedBox(height: 4),
+      Row(
         children: [
-          Text(event.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(Icons.location_on_outlined, size: 13, color: AppColors.muted),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  event.venue,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                ),
-              ),
-            ],
+          const Icon(
+            Icons.location_on_outlined,
+            size: 13,
+            color: AppColors.muted,
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              event.venue,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppColors.muted),
+            ),
           ),
         ],
-      );
+      ),
+    ],
+  );
 
   Widget get _when => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(formatDate(event.startAt), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(formatTime(event.startAt), style: const TextStyle(fontSize: 11, color: AppColors.muted)),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        formatDate(event.startAt),
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        formatTime(event.startAt),
+        style: const TextStyle(fontSize: 11, color: AppColors.muted),
+      ),
+    ],
+  );
 
   Widget get _sold => Row(
-        children: [
-          SizedBox(width: 80, child: ProgressBar(value: event.fill)),
-          const SizedBox(width: 12),
-          Text(
-            '${event.sold}/${event.capacity}',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0x80000000)),
-          ),
-        ],
-      );
+    children: [
+      SizedBox(width: 80, child: ProgressBar(value: event.fill)),
+      const SizedBox(width: 12),
+      Text(
+        '${event.sold}/${event.capacity}',
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Color(0x80000000),
+        ),
+      ),
+    ],
+  );
 
   Widget get _status {
     final onSale = event.status == EventStatus.onSale;
@@ -364,30 +440,37 @@ class _EventRow extends StatelessWidget {
   }
 
   Widget get _actions => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (event.status == EventStatus.draft || event.status == EventStatus.onSale)
-            TextButton(
-              onPressed: onEdit,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                minimumSize: const Size(48, 36),
-                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-              ),
-              child: const Text('Edit'),
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (event.status == EventStatus.draft ||
+          event.status == EventStatus.onSale)
+        TextButton(
+          onPressed: onEdit,
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.primary,
+            minimumSize: const Size(48, 36),
+            textStyle: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
             ),
-          if (event.status == EventStatus.draft)
-            TextButton(
-              onPressed: onDelete,
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.danger,
-                minimumSize: const Size(48, 36),
-                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-              ),
-              child: const Text('Delete'),
+          ),
+          child: const Text('Edit'),
+        ),
+      if (event.status == EventStatus.draft)
+        TextButton(
+          onPressed: onDelete,
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.danger,
+            minimumSize: const Size(48, 36),
+            textStyle: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
             ),
-        ],
-      );
+          ),
+          child: const Text('Delete'),
+        ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -399,8 +482,17 @@ class _EventRow extends StatelessWidget {
                 Expanded(flex: 4, child: _title),
                 Expanded(flex: 2, child: _when),
                 Expanded(flex: 3, child: _sold),
-                SizedBox(width: 90, child: Align(alignment: Alignment.centerLeft, child: _status)),
-                SizedBox(width: 124, child: Align(alignment: Alignment.centerRight, child: _actions)),
+                SizedBox(
+                  width: 90,
+                  child: Align(alignment: Alignment.centerLeft, child: _status),
+                ),
+                SizedBox(
+                  width: 124,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _actions,
+                  ),
+                ),
               ],
             ),
           )
@@ -409,13 +501,19 @@ class _EventRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(padding: const EdgeInsets.only(right: 8), child: _title),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _title,
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Text(
                       '${formatDate(event.startAt)} · ${formatTime(event.startAt)}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const Spacer(),
                     _status,
@@ -430,7 +528,9 @@ class _EventRow extends StatelessWidget {
           );
 
     return Container(
-      decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
       child: InkWell(onTap: onOpen, child: content),
     );
   }

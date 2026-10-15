@@ -5,7 +5,6 @@ import '../core/format.dart';
 import '../models/models.dart';
 import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
-import '../widgets/common.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key, this.event});
@@ -89,16 +88,30 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   void _addTicketType([TicketType? ticket]) {
     _ticketNames.add(TextEditingController(text: ticket?.name ?? ''));
-    _ticketPrices.add(TextEditingController(
-      text: ticket == null ? '' : (ticket.priceCents / 100).toStringAsFixed(2),
-    ));
+    _ticketPrices.add(
+      TextEditingController(
+        text: ticket == null
+            ? ''
+            : (ticket.priceCents / 100).toStringAsFixed(2),
+      ),
+    );
   }
 
   @override
   void dispose() {
     for (final controller in [
-      _name, _venue, _capacity, _description, _category, _headliner, _price,
-      _dateText, _timeText, _endDateText, ..._ticketNames, ..._ticketPrices,
+      _name,
+      _venue,
+      _capacity,
+      _description,
+      _category,
+      _headliner,
+      _price,
+      _dateText,
+      _timeText,
+      _endDateText,
+      ..._ticketNames,
+      ..._ticketPrices,
     ]) {
       controller.dispose();
     }
@@ -106,19 +119,18 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   }
 
   Future<void> _pickDate({bool end = false}) async {
-    final now = DateUtils.dateOnly(DateTime.now());
     final current = end ? _endDate : _date;
     final afterStart = _date == null
-        ? now
+        ? DateTime(1900)
         : DateUtils.dateOnly(_date!).add(const Duration(days: 1));
-    final first = end
-        ? (afterStart.isAfter(now) ? afterStart : now)
-        : (current != null && current.isBefore(now) ? current : now);
+    final first = end ? afterStart : DateTime(1900);
     final picked = await showDatePicker(
       context: context,
-      initialDate: current != null && !current.isBefore(first) ? current : first,
+      initialDate: current != null && !current.isBefore(first)
+          ? current
+          : first,
       firstDate: first,
-      lastDate: DateTime(now.year + 5),
+      lastDate: DateTime(2100),
     );
     if (picked == null) return;
     setState(() {
@@ -145,14 +157,18 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     if (picked == null) return;
     setState(() {
       _time = picked;
-      _timeText.text = formatTime(DateTime(2000, 1, 1, picked.hour, picked.minute));
+      _timeText.text = formatTime(
+        DateTime(2000, 1, 1, picked.hour, picked.minute),
+      );
       _errorMessage = null;
     });
   }
 
   String? _validateRequired(String? value, String label, int max) {
     final text = (value ?? '').trim();
-    if (text.isEmpty || text.length > max) return 'Enter $label (up to $max characters).';
+    if (text.isEmpty || text.length > max) {
+      return 'Enter $label (up to $max characters).';
+    }
     return null;
   }
 
@@ -162,27 +178,40 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       return 'Enter a capacity from 1 to 100,000.';
     }
     final sold = widget.event?.sold ?? 0;
-    if (number < sold) return 'Capacity can’t be lower than the $sold tickets sold.';
+    if (number < sold) {
+      return 'Capacity can’t be lower than the $sold tickets sold.';
+    }
     return null;
   }
 
   int? _priceInCents(String input) {
-    final value = double.tryParse(input.trim());
-    if (value == null || value <= 0 || value > 1000000) return null;
-    final cents = (value * 100).round();
+    final value = input.trim();
+    if (!RegExp(r'^\d+(?:\.\d{1,2})?$').hasMatch(value)) return null;
+    final parts = value.split('.');
+    final whole = int.tryParse(parts.first);
+    final fraction = parts.length == 1
+        ? 0
+        : int.tryParse(parts.last.padRight(2, '0'));
+    if (whole == null || fraction == null) return null;
+    final cents = whole * 100 + fraction;
     return cents > 0 && cents <= 100000000 ? cents : null;
   }
 
   Future<void> _save() async {
     setState(() => _errorMessage = null);
     if (!_formKey.currentState!.validate()) return;
-    if (_date == null || _time == null || (_multipleDay &&
-        (_endDate == null || !_endDate!.isAfter(_date!)))) {
-      setState(() => _errorMessage = 'Choose a valid date, time, and later end date.');
+    if (_date == null ||
+        _time == null ||
+        (_multipleDay && (_endDate == null || !_endDate!.isAfter(_date!)))) {
+      setState(
+        () => _errorMessage = 'Choose a valid date, time, and later end date.',
+      );
       return;
     }
     final total = int.parse(_capacity.text.trim());
-    final priceCents = _pricingMode == 'single' ? _priceInCents(_price.text) : null;
+    final priceCents = _pricingMode == 'single'
+        ? _priceInCents(_price.text)
+        : null;
     if (_pricingMode == 'single' && priceCents == null) {
       setState(() => _errorMessage = 'Enter a ticket price greater than zero.');
       return;
@@ -192,12 +221,21 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       for (var i = 0; i < _ticketNames.length; i++) {
         final price = _priceInCents(_ticketPrices[i].text);
         if (_ticketNames[i].text.trim().isEmpty ||
-            _ticketNames[i].text.trim().length > 80 || price == null) {
-          setState(() => _errorMessage =
-              'Enter a name (up to 80 characters) and a valid price for each ticket type.');
+            _ticketNames[i].text.trim().length > 80 ||
+            price == null) {
+          setState(
+            () => _errorMessage =
+                'Enter a name (up to 80 characters) and a valid price for each ticket type.',
+          );
           return;
         }
-        tickets.add(TicketType(id: '', name: _ticketNames[i].text.trim(), priceCents: price));
+        tickets.add(
+          TicketType(
+            id: '',
+            name: _ticketNames[i].text.trim(),
+            priceCents: price,
+          ),
+        );
       }
     }
     setState(() => _saving = true);
@@ -224,14 +262,20 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         status: existing?.status ?? EventStatus.draft,
       );
       await AppScope.of(context).saveEvent(event);
-      if (mounted) Navigator.of(context).pop(
-        _editing ? 'Event details updated.' : 'Event created and saved as a draft.',
-      );
+      if (mounted) {
+        Navigator.of(context).pop(
+          _editing
+              ? 'Event details updated.'
+              : 'Event created and saved as a draft.',
+        );
+      }
     } catch (error) {
       if (mounted) {
-        setState(() => _errorMessage = error is GatherlyApiException
-            ? error.message
-            : 'Unable to save the event. Please try again.');
+        setState(
+          () => _errorMessage = error is GatherlyApiException
+              ? error.message
+              : 'Unable to save the event. Please try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -240,7 +284,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   Widget _label(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+    ),
   );
 
   Widget _textField({
@@ -258,8 +305,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         controller: controller,
         maxLength: max,
         maxLines: lines,
-        validator: validator ?? (value) => _validateRequired(value, label.toLowerCase(), max),
-        decoration: InputDecoration(hintText: hint, counterText: lines > 1 ? null : ''),
+        validator:
+            validator ??
+            (value) => _validateRequired(value, label.toLowerCase(), max),
+        decoration: InputDecoration(
+          hintText: hint,
+          counterText: lines > 1 ? null : '',
+        ),
         onChanged: (_) => setState(() => _errorMessage = null),
       ),
     ],
@@ -267,7 +319,10 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(scrolledUnderElevation: 0, title: Text(_editing ? 'Edit event' : 'Create event')),
+    appBar: AppBar(
+      scrolledUnderElevation: 0,
+      title: Text(_editing ? 'Edit event' : 'Create event'),
+    ),
     body: SafeArea(
       child: Center(
         child: SingleChildScrollView(
@@ -279,32 +334,81 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(_editing ? 'EDIT EVENT' : 'NEW EVENT',
-                      style: const TextStyle(color: AppColors.primary, fontSize: 11,
-                          fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                  Text(
+                    _editing ? 'EDIT EVENT' : 'NEW EVENT',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  Text(_editing ? 'Update event details' : 'Create something memorable',
-                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8)),
+                  Text(
+                    _editing
+                        ? 'Update event details'
+                        : 'Create something memorable',
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.8,
+                    ),
+                  ),
                   const SizedBox(height: 24),
-                  _textField(controller: _name, label: 'Event name', hint: 'e.g. Philippine Tech Expo',
-                      max: 120),
+                  _textField(
+                    controller: _name,
+                    label: 'Event name',
+                    hint: 'e.g. Philippine Tech Expo',
+                    max: 120,
+                  ),
                   const SizedBox(height: 16),
-                  _textField(controller: _category, label: 'Category', hint: 'e.g. Technology', max: 100),
+                  _textField(
+                    controller: _category,
+                    label: 'Category',
+                    hint: 'e.g. Technology',
+                    max: 100,
+                  ),
                   const SizedBox(height: 16),
-                  _textField(controller: _headliner, label: 'Headliner', hint: 'Featured speaker or performer', max: 150),
+                  _textField(
+                    controller: _headliner,
+                    label: 'Headliner',
+                    hint: 'Featured speaker or performer',
+                    max: 150,
+                  ),
                   const SizedBox(height: 16),
-                  _textField(controller: _description, label: 'Description', hint: 'Tell guests about the event',
-                      max: 5000, lines: 4),
+                  _textField(
+                    controller: _description,
+                    label: 'Description',
+                    hint: 'Tell guests about the event',
+                    max: 5000,
+                    lines: 4,
+                  ),
                   const SizedBox(height: 16),
-                  Row(children: [
-                    Expanded(child: _datePicker('Date', _dateText, () => _pickDate())),
-                    const SizedBox(width: 12),
-                    Expanded(child: _datePicker('Time', _timeText, _pickTime)),
-                  ]),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _datePicker(
+                          'Date',
+                          _dateText,
+                          () => _pickDate(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _datePicker('Time', _timeText, _pickTime),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Multiple-day event', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                    title: const Text(
+                      'Multiple-day event',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     value: _multipleDay,
                     onChanged: (value) => setState(() {
                       _multipleDay = value;
@@ -312,21 +416,40 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                     }),
                   ),
                   if (_multipleDay) ...[
-                    _datePicker('End date', _endDateText, () => _pickDate(end: true)),
+                    _datePicker(
+                      'End date',
+                      _endDateText,
+                      () => _pickDate(end: true),
+                    ),
                     const SizedBox(height: 16),
                   ],
-                  _textField(controller: _venue, label: 'Venue', hint: 'Venue or online link', max: 200),
+                  _textField(
+                    controller: _venue,
+                    label: 'Venue',
+                    hint: 'Venue or online link',
+                    max: 200,
+                  ),
                   const SizedBox(height: 16),
-                  _textField(controller: _capacity, label: 'Total capacity', hint: '100',
-                      validator: _validateCapacity),
+                  _textField(
+                    controller: _capacity,
+                    label: 'Total capacity',
+                    hint: '100',
+                    validator: _validateCapacity,
+                  ),
                   const SizedBox(height: 16),
                   _label('Pricing'),
                   DropdownButtonFormField<String>(
-                    value: _pricingMode,
+                    initialValue: _pricingMode,
                     items: const [
                       DropdownMenuItem(value: 'free', child: Text('Free')),
-                      DropdownMenuItem(value: 'single', child: Text('Single price')),
-                      DropdownMenuItem(value: 'multiple', child: Text('Multiple ticket types')),
+                      DropdownMenuItem(
+                        value: 'single',
+                        child: Text('Single price'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'multiple',
+                        child: Text('Multiple ticket types'),
+                      ),
                     ],
                     onChanged: (value) => setState(() {
                       _pricingMode = value ?? 'free';
@@ -340,24 +463,42 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                   if (_pricingMode == 'multiple') ...[
                     const SizedBox(height: 12),
                     for (var i = 0; i < _ticketNames.length; i++) ...[
-                      Row(children: [
-                        Expanded(child: TextFormField(controller: _ticketNames[i],
-                          maxLength: 80, decoration: InputDecoration(hintText: 'Ticket type ${i + 1}', counterText: ''),
-                          onChanged: (_) => setState(() => _errorMessage = null))),
-                        const SizedBox(width: 8),
-                        Expanded(child: _priceField(_ticketPrices[i], 'Price PHP')),
-                        if (_ticketNames.length > 2)
-                          IconButton(onPressed: () => setState(() {
-                            _ticketNames.removeAt(i).dispose();
-                            _ticketPrices.removeAt(i).dispose();
-                          }), icon: const Icon(Icons.remove_circle_outline)),
-                      ]),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _ticketNames[i],
+                              maxLength: 80,
+                              decoration: InputDecoration(
+                                hintText: 'Ticket type ${i + 1}',
+                                counterText: '',
+                              ),
+                              onChanged: (_) =>
+                                  setState(() => _errorMessage = null),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _priceField(_ticketPrices[i], 'Price PHP'),
+                          ),
+                          if (_ticketNames.length > 2)
+                            IconButton(
+                              onPressed: () => setState(() {
+                                _ticketNames.removeAt(i).dispose();
+                                _ticketPrices.removeAt(i).dispose();
+                              }),
+                              icon: const Icon(Icons.remove_circle_outline),
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
                     ],
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
-                        onPressed: _ticketNames.length >= 10 ? null : () => setState(() => _addTicketType()),
+                        onPressed: _ticketNames.length >= 10
+                            ? null
+                            : () => setState(() => _addTicketType()),
                         icon: const Icon(Icons.add),
                         label: const Text('Add ticket type (2–10)'),
                       ),
@@ -371,25 +512,53 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                         color: AppColors.danger.withValues(alpha: .08),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Row(children: [
-                        const Icon(Icons.error_outline, color: AppColors.danger, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(_errorMessage!, style: const TextStyle(color: AppColors.danger, fontSize: 13))),
-                      ]),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppColors.danger,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(
+                                color: AppColors.danger,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                   const SizedBox(height: 24),
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                    TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(),
-                        child: const Text('Cancel')),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _saving ? null : _save,
-                      child: _saving ? const SizedBox(width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(_editing ? 'Save changes' : 'Create draft'),
-                    ),
-                  ]),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: _saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(_editing ? 'Save changes' : 'Create draft'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -399,26 +568,37 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     ),
   );
 
-  Widget _datePicker(String label, TextEditingController controller, VoidCallback onTap) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _label(label),
-        TextFormField(
-          controller: controller,
-          readOnly: true,
-          onTap: onTap,
-          validator: (_) => controller.text.isEmpty ? 'Select $label.' : null,
-          decoration: InputDecoration(
-            hintText: label == 'Time' ? 'Select time' : 'Select date',
-            suffixIcon: Icon(label == 'Time' ? Icons.schedule : Icons.calendar_today_outlined, size: 18),
+  Widget _datePicker(
+    String label,
+    TextEditingController controller,
+    VoidCallback onTap,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _label(label),
+      TextFormField(
+        controller: controller,
+        readOnly: true,
+        onTap: onTap,
+        validator: (_) => controller.text.isEmpty ? 'Select $label.' : null,
+        decoration: InputDecoration(
+          hintText: label == 'Time' ? 'Select time' : 'Select date',
+          suffixIcon: Icon(
+            label == 'Time' ? Icons.schedule : Icons.calendar_today_outlined,
+            size: 18,
           ),
         ),
-      ]);
-
-  Widget _priceField(TextEditingController controller, String hint) => TextFormField(
-    controller: controller,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-    decoration: InputDecoration(hintText: hint, prefixText: '₱ '),
-    validator: (value) => _priceInCents(value ?? '') == null ? 'Enter a valid price.' : null,
-    onChanged: (_) => setState(() => _errorMessage = null),
+      ),
+    ],
   );
+
+  Widget _priceField(TextEditingController controller, String hint) =>
+      TextFormField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(hintText: hint, prefixText: '₱ '),
+        validator: (value) =>
+            _priceInCents(value ?? '') == null ? 'Enter a valid price.' : null,
+        onChanged: (_) => setState(() => _errorMessage = null),
+      );
 }
