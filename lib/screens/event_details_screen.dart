@@ -196,6 +196,41 @@ class EventDetailsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text(event.description, style: const TextStyle(fontSize: 14, height: 1.5)),
                   ],
+                  const SizedBox(height: 18),
+                  Panel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const PanelTitle('Event information', 'Details used for your published event.'),
+                        const SizedBox(height: 14),
+                        _DetailLine(
+                          Icons.sell_outlined,
+                          switch (event.pricingMode) {
+                            'single' => 'Ticket price · ${formatPeso(event.priceCents)}',
+                            'multiple' => 'Multiple ticket types',
+                            _ => 'Free admission',
+                          },
+                        ),
+                        if (event.pricingMode == 'multiple')
+                          for (final ticket in event.ticketTypes)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 27, top: 8),
+                              child: Text(
+                                '${ticket.name} · ${formatPeso(ticket.priceCents)}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        const SizedBox(height: 12),
+                        _DetailLine(
+                          Icons.confirmation_number_outlined,
+                          'Event code · ${event.eventCode.isEmpty ? 'Not assigned' : event.eventCode}',
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 24),
                   Panel(
                     child: Column(
@@ -228,16 +263,27 @@ class EventDetailsScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   if (onSale && event.registrationUrl.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    SelectableText(event.registrationUrl),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: () async {
-                          await Clipboard.setData(ClipboardData(text: event.registrationUrl));
-                          if (context.mounted) showToast(context, 'Registration link copied.');
-                        },
-                        icon: const Icon(Icons.copy, size: 16),
-                        label: const Text('Copy registration link'),
+                    Panel(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const PanelTitle('Registration link', 'Share this link with your guests.'),
+                          const SizedBox(height: 10),
+                          SelectableText(event.registrationUrl),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () async {
+                                await Clipboard.setData(ClipboardData(text: event.registrationUrl));
+                                if (context.mounted) {
+                                  showToast(context, 'Registration link copied.');
+                                }
+                              },
+                              icon: const Icon(Icons.copy, size: 16),
+                              label: const Text('Copy registration link'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

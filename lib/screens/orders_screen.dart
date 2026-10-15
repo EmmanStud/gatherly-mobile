@@ -47,9 +47,19 @@ class _OrdersPanelState extends State<OrdersPanel> {
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     final orders = state.orders;
-    final filtered = _eventFilter == null
+    final selectedEvent = _eventFilter == null
+        ? null
+        : state.events.where((event) => event.id == _eventFilter).firstOrNull;
+    final filtered = selectedEvent == null
         ? orders
-        : orders.where((order) => order.eventId == _eventFilter).toList();
+        : orders
+              .where(
+                (order) =>
+                    order.eventId == selectedEvent.id ||
+                    (selectedEvent.eventCode.isNotEmpty &&
+                        order.eventCode == selectedEvent.eventCode),
+              )
+              .toList();
     return Panel(
       padding: EdgeInsets.zero,
       child: Column(
@@ -82,7 +92,7 @@ class _OrdersPanelState extends State<OrdersPanel> {
             ),
           if (state.isLoadingData && orders.isEmpty)
             const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
-          if (filtered.isEmpty)
+          if (!state.isLoadingData && state.dataError == null && filtered.isEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 16, 24, 48),
               child: Center(child: Text('No orders found.')),
@@ -93,7 +103,6 @@ class _OrdersPanelState extends State<OrdersPanel> {
       ),
     );
   }
-
 }
 
 class _OrderRow extends StatelessWidget {

@@ -37,9 +37,19 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final attendees = _eventFilter == null
+    final selectedEvent = _eventFilter == null
+        ? null
+        : state.events.where((event) => event.id == _eventFilter).firstOrNull;
+    final attendees = selectedEvent == null
         ? state.attendees
-        : state.attendees.where((person) => person.eventId == _eventFilter).toList();
+        : state.attendees
+              .where(
+                (person) =>
+                    person.eventId == selectedEvent.id ||
+                    (selectedEvent.eventCode.isNotEmpty &&
+                        person.eventCode == selectedEvent.eventCode),
+              )
+              .toList();
     return Panel(
       padding: EdgeInsets.zero,
       child: Column(
@@ -49,7 +59,7 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
             padding: const EdgeInsets.all(24),
             child: PanelTitle(
               'Attendee check-in',
-              '${state.checkedInCount} of ${attendees.length} guests checked in.',
+              '${attendees.where((person) => person.checkedIn).length} of ${attendees.length} guests checked in.',
             ),
           ),
           Padding(
@@ -75,7 +85,7 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
               ),
             if (state.isLoadingData && attendees.isEmpty)
               const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
-          if (attendees.isEmpty)
+          if (!state.isLoadingData && state.dataError == null && attendees.isEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 16, 24, 48),
               child: Center(child: Text('No attendees yet.')),

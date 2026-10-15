@@ -150,7 +150,9 @@ class _EventsPanelState extends State<EventsPanel> {
                   onEdit: () => _edit(event),
                   onDelete: () => _delete(event),
                 ),
-              if (filtered.isEmpty)
+              if (!state.isLoadingData &&
+                  state.dataError == null &&
+                  filtered.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 56),
                   child: Column(
