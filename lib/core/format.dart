@@ -22,7 +22,7 @@ String formatTime(DateTime d) {
   return '$hour:$minute $suffix';
 }
 
-/// Tuesday, 13 October 2026
+/// Formats the weekday, day, month, and year.
 String formatLongDate(DateTime d) =>
     '${_weekdays[d.weekday - 1]}, ${d.day} ${_monthsLong[d.month - 1]} ${d.year}';
 
@@ -40,7 +40,7 @@ String groupThousands(int value) {
 /// Money is stored in centavos; 250000 -> ₱2,500
 String formatPeso(int centavos) => '₱${groupThousands(centavos ~/ 100)}';
 
-/// "Chrysdale Soltes" -> "CS"
+/// Builds up to two initials from the name.
 String initials(String name) {
   final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
   return parts.take(2).map((p) => p[0].toUpperCase()).join();

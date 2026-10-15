@@ -112,4 +112,78 @@ void main() {
     );
     api.close();
   });
+
+  test('profile and password API calls use authenticated routes', () async {
+    SharedPreferences.setMockInitialValues({
+      'gatherly_session_token': 'profile-test-token',
+    });
+    final requests = <http.Request>[];
+    final api = GatherlyApi(
+      client: MockClient((request) async {
+        requests.add(request);
+        if (request.url.path == '/api/auth/profile') {
+          return http.Response(
+            jsonEncode({
+              'user': {
+                'name': 'Updated Name',
+                'email': 'user@example.com',
+                'accountType': 'customer',
+              },
+            }),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          '{"message":"Password changed successfully."}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+      baseUrl: 'http://localhost:4000/api',
+    );
+
+    final user = await api.updateProfile(name: 'Updated Name');
+    expect(user.name, 'Updated Name');
+    expect(requests[0].method, 'PATCH');
+    expect(requests[0].headers['Authorization'], startsWith('Bearer '));
+    expect(jsonDecode(requests[0].body), {'name': 'Updated Name'});
+
+    final message = await api.changePassword(
+      currentPassword: 'OldPassword9!',
+      newPassword: 'NewPassword9!',
+      confirmNewPassword: 'NewPassword9!',
+    );
+    expect(message, 'Password changed successfully.');
+    expect(requests[1].method, 'POST');
+    expect(requests[1].headers['Authorization'], startsWith('Bearer '));
+    expect(jsonDecode(requests[1].body), {
+      'currentPassword': 'OldPassword9!',
+      'newPassword': 'NewPassword9!',
+      'confirmNewPassword': 'NewPassword9!',
+    });
+    api.close();
+  });
+
+  test('authenticated 401 clears the token and notifies the app', () async {
+    SharedPreferences.setMockInitialValues({
+      'gatherly_session_token': 'expired-token',
+    });
+    var notified = false;
+    final api = GatherlyApi(
+      client: MockClient(
+        (_) async => http.Response('{"error":"Session expired."}', 401),
+      ),
+      baseUrl: 'http://localhost:4000/api',
+    )..onUnauthorized = () => notified = true;
+
+    await expectLater(
+      api.updateProfile(name: 'Updated Name'),
+      throwsA(isA<GatherlyApiException>()),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('gatherly_session_token'), isNull);
+    expect(notified, isTrue);
+    api.close();
+  });
 }

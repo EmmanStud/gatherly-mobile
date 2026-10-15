@@ -3,15 +3,16 @@ import 'package:flutter/widgets.dart';
 import '../models/models.dart';
 import '../services/gatherly_api.dart';
 
-/// In-memory app state seeded with the Figma sample data.
-/// Replace the methods with repository/API calls when the backend is ready.
 class AppState extends ChangeNotifier {
-  AppState({GatherlyApi? api}) : _api = api ?? GatherlyApi();
+  AppState({GatherlyApi? api}) : _api = api ?? GatherlyApi() {
+    _api.onUnauthorized = _handleUnauthorized;
+  }
 
   final GatherlyApi _api;
   AuthUser? _user;
   bool _isRestoringSession = true;
   String? _sessionRestoreError;
+  void Function()? onSessionExpired;
 
   final List<Event> _events = [
     Event(
@@ -65,12 +66,7 @@ class AppState extends ChangeNotifier {
     Attendee(id: 4, name: 'Diomella Agustin', eventName: 'Cebu Creatives Morning', ticket: 'Regular', checkedIn: true),
   ];
 
-  Profile _profile = const Profile(
-    name: 'Chrysdale Soltes',
-    email: 'chrysdale@gatherly.ph',
-    phone: '+63 917 123 4567',
-    organization: 'Gatherly Events PH',
-  );
+  Profile _profile = const Profile(name: '', email: '', phone: '', organization: '');
 
   Preferences _preferences = const Preferences();
   int _nextEventId = 5;
@@ -100,7 +96,9 @@ class AppState extends ChangeNotifier {
       final user = await _api.currentUser();
       if (user != null) signIn(user);
     } catch (error) {
-      _sessionRestoreError = error.toString();
+      if (error is! GatherlyApiException || error.statusCode != 401) {
+        _sessionRestoreError = error.toString();
+      }
     } finally {
       _isRestoringSession = false;
       notifyListeners();
@@ -121,6 +119,19 @@ class AppState extends ChangeNotifier {
       organization: _profile.organization,
     );
     notifyListeners();
+  }
+
+  void _handleUnauthorized() {
+    _user = null;
+    _profile = Profile(
+      name: '',
+      email: '',
+      phone: _profile.phone,
+      organization: _profile.organization,
+    );
+    _sessionRestoreError = null;
+    notifyListeners();
+    onSessionExpired?.call();
   }
 
   Future<void> signOut() async {
@@ -228,8 +239,15 @@ class AppState extends ChangeNotifier {
   }
 
   // ---- profile / settings ----
-  void updateProfile(Profile profile) {
-    _profile = profile;
+  Future<void> updateProfile(Profile profile) async {
+    final user = await _api.updateProfile(name: profile.name);
+    _user = user;
+    _profile = Profile(
+      name: user.name,
+      email: user.email,
+      phone: profile.phone,
+      organization: profile.organization,
+    );
     notifyListeners();
   }
 

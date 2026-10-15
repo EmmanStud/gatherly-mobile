@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 
@@ -120,7 +121,7 @@ class SettingsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
-            onPressed: () => showToast(context, 'Password reset instructions sent to your email.'),
+            onPressed: () => _showPasswordChange(context),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.ink,
               minimumSize: const Size(0, 48),
@@ -129,12 +130,166 @@ class SettingsPanel extends StatelessWidget {
               textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
             ),
             icon: const Icon(Icons.lock_reset),
-            label: const Text('Send password reset email'),
+            label: const Text('Change password'),
           ),
         ],
       ),
     );
 
     return TwoColumn(left: notifications, right: security, breakpoint: 900);
+  }
+}
+
+Future<void> _showPasswordChange(BuildContext context) async {
+  final message = await showDialog<String>(
+    context: context,
+    builder: (_) => _ChangePasswordDialog(api: AppScope.of(context).api),
+  );
+  if (message != null && context.mounted) showToast(context, message);
+}
+
+class _ChangePasswordDialog extends StatefulWidget {
+  const _ChangePasswordDialog({required this.api});
+
+  final GatherlyApi api;
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _currentPassword = TextEditingController();
+  final _newPassword = TextEditingController();
+  final _confirmPassword = TextEditingController();
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _currentPassword.dispose();
+    _newPassword.dispose();
+    _confirmPassword.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+    try {
+      final message = await widget.api.changePassword(
+        currentPassword: _currentPassword.text,
+        newPassword: _newPassword.text,
+        confirmNewPassword: _confirmPassword.text,
+      );
+      if (mounted) Navigator.pop(context, message);
+    } on GatherlyApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Unable to change your password. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change password'),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _currentPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Current password'),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Enter your current password.'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _newPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'New password'),
+                  validator: passwordField,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _confirmPassword,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Confirm new password'),
+                  validator: (value) {
+                    final passwordError = passwordField(value);
+                    if (passwordError != null) return passwordError;
+                    if (value != _newPassword.text) {
+                      return 'Passwords do not match.';
+                    }
+                    return null;
+                  },
+                ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFEEEE),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 18,
+                          color: Color(0xFFB3261E),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: Color(0xFFB3261E),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _isSubmitting ? null : _submit,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Change password'),
+        ),
+      ],
+    );
   }
 }

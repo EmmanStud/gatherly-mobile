@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import 'login_screen.dart';
@@ -11,10 +10,7 @@ const Color gatherlyYellow = Color(0xFFF4DFA6);
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
-  void _showAuthDialog(
-    BuildContext context, {
-    required bool isRegister,
-  }) {
+  void _showAuthDialog(BuildContext context, {required bool isRegister}) {
     showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -32,8 +28,7 @@ class WelcomeScreen extends StatelessWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: 420,
-                maxHeight:
-                    MediaQuery.of(dialogContext).size.height * 0.85,
+                maxHeight: MediaQuery.of(dialogContext).size.height * 0.85,
               ),
               child: Material(
                 color: Colors.white,
@@ -41,8 +36,7 @@ class WelcomeScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Padding(
-                      padding:
-                          const EdgeInsets.fromLTRB(16, 12, 12, 8),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
                       child: Row(
                         children: [
                           const CircleAvatar(
@@ -66,8 +60,7 @@ class WelcomeScreen extends StatelessWidget {
                           const Spacer(),
                           IconButton(
                             tooltip: 'Close',
-                            onPressed: () =>
-                                Navigator.of(dialogContext).pop(),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
                             icon: const Icon(Icons.close, size: 19),
                           ),
                         ],
@@ -76,23 +69,17 @@ class WelcomeScreen extends StatelessWidget {
                     const Divider(height: 1),
                     Flexible(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(
-                          22, 20, 22, 18,
-                        ),
+                        padding: const EdgeInsets.fromLTRB(22, 20, 22, 18),
                         child: isRegister
                             ? RegisterScreen(
                                 isDialog: true,
                                 onSwitchToLogin: () {
                                   Navigator.of(dialogContext).pop();
-                                  _showAuthDialog(
-                                    context,
-                                    isRegister: false,
-                                  );
+                                  _showAuthDialog(context, isRegister: false);
                                 },
                                 onSuccess: () {
                                   Navigator.of(dialogContext).pop();
-                                  Navigator.of(context)
-                                      .pushNamedAndRemoveUntil(
+                                  Navigator.of(context).pushNamedAndRemoveUntil(
                                     '/dashboard',
                                     (route) => false,
                                   );
@@ -102,10 +89,7 @@ class WelcomeScreen extends StatelessWidget {
                                 isDialog: true,
                                 onSwitchToRegister: () {
                                   Navigator.of(dialogContext).pop();
-                                  _showAuthDialog(
-                                    context,
-                                    isRegister: true,
-                                  );
+                                  _showAuthDialog(context, isRegister: true);
                                 },
                               ),
                       ),
@@ -129,8 +113,9 @@ class WelcomeScreen extends StatelessWidget {
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             final isWide = width >= 700;
-            final horizontalPadding =
-                isWide ? 48.0 : (width < 360 ? 16.0 : 24.0);
+            final horizontalPadding = isWide
+                ? 48.0
+                : (width < 360 ? 16.0 : 24.0);
 
             return SingleChildScrollView(
               child: Center(
@@ -142,8 +127,10 @@ class WelcomeScreen extends StatelessWidget {
                       // Top navigation
                       Padding(
                         padding: EdgeInsets.fromLTRB(
-                          horizontalPadding, 12,
-                          horizontalPadding, 20,
+                          horizontalPadding,
+                          12,
+                          horizontalPadding,
+                          20,
                         ),
                         child: Row(
                           children: [
@@ -163,18 +150,14 @@ class WelcomeScreen extends StatelessWidget {
                             ),
                             const Spacer(),
                             TextButton(
-                              onPressed: () => _showAuthDialog(
-                                context,
-                                isRegister: false,
-                              ),
+                              onPressed: () =>
+                                  _showAuthDialog(context, isRegister: false),
                               child: const Text('Sign In'),
                             ),
                             const SizedBox(width: 5),
                             FilledButton(
-                              onPressed: () => _showAuthDialog(
-                                context,
-                                isRegister: true,
-                              ),
+                              onPressed: () =>
+                                  _showAuthDialog(context, isRegister: true),
                               style: FilledButton.styleFrom(
                                 backgroundColor: gatherlyBlue,
                                 foregroundColor: Colors.white,
@@ -183,8 +166,7 @@ class WelcomeScreen extends StatelessWidget {
                                   vertical: 11,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
                               child: const Text('Sign Up'),
@@ -284,8 +266,7 @@ class WelcomeScreen extends StatelessWidget {
                                 ),
                               ),
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Expanded(
                                     child: Center(
@@ -303,8 +284,7 @@ class WelcomeScreen extends StatelessWidget {
                                     ),
                                     decoration: BoxDecoration(
                                       color: gatherlyYellow,
-                                      borderRadius:
-                                          BorderRadius.circular(20),
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: const Text(
                                       'ON SALE',
@@ -438,8 +418,7 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                         child: isWide
                             ? Row(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Expanded(
                                     child: _featureCard(
@@ -463,8 +442,7 @@ class WelcomeScreen extends StatelessWidget {
                                           'sales, and keep every transaction '
                                           'organized.',
                                       color: const Color(0xFFE0E7F3),
-                                      icon:
-                                          Icons.confirmation_num_rounded,
+                                      icon: Icons.confirmation_num_rounded,
                                     ),
                                   ),
                                   const SizedBox(width: 16),
@@ -525,9 +503,7 @@ class WelcomeScreen extends StatelessWidget {
                       // Dark footer
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(
-                          22, 38, 22, 28,
-                        ),
+                        padding: const EdgeInsets.fromLTRB(22, 38, 22, 28),
                         color: gatherlyInk,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,16 +577,14 @@ class WelcomeScreen extends StatelessWidget {
                                       ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFF969DDC),
-                                        borderRadius:
-                                            BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                     ),
                                     Container(
                                       padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFF8F7F2),
-                                        borderRadius:
-                                            BorderRadius.circular(16),
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
                                       child: Column(
                                         crossAxisAlignment:
@@ -629,16 +603,11 @@ class WelcomeScreen extends StatelessWidget {
                                               ),
                                               CircleAvatar(
                                                 radius: 10,
-                                                backgroundColor:
-                                                    gatherlyYellow,
-                                                child: Text(
-                                                  'CS',
-                                                  style: TextStyle(
-                                                    fontSize: 7,
-                                                    color: gatherlyInk,
-                                                    fontWeight:
-                                                        FontWeight.bold,
-                                                  ),
+                                                backgroundColor: gatherlyYellow,
+                                                child: Icon(
+                                                  Icons.person_outline,
+                                                  size: 12,
+                                                  color: gatherlyInk,
                                                 ),
                                               ),
                                             ],
@@ -654,8 +623,7 @@ class WelcomeScreen extends StatelessWidget {
                                           const SizedBox(height: 10),
                                           Container(
                                             width: double.infinity,
-                                            padding:
-                                                const EdgeInsets.all(12),
+                                            padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
                                               color: gatherlyInk,
                                               borderRadius:
@@ -679,8 +647,7 @@ class WelcomeScreen extends StatelessWidget {
                                                   style: TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 10,
-                                                    fontWeight:
-                                                        FontWeight.bold,
+                                                    fontWeight: FontWeight.bold,
                                                   ),
                                                 ),
                                                 SizedBox(height: 12),
@@ -699,15 +666,13 @@ class WelcomeScreen extends StatelessWidget {
                                                     ),
                                                     SizedBox(width: 5),
                                                     Padding(
-                                                      padding:
-                                                          EdgeInsets.only(
+                                                      padding: EdgeInsets.only(
                                                         bottom: 3,
                                                       ),
                                                       child: Text(
                                                         'tickets sold',
                                                         style: TextStyle(
-                                                          color:
-                                                              Colors.white60,
+                                                          color: Colors.white60,
                                                           fontSize: 8,
                                                         ),
                                                       ),
@@ -723,29 +688,21 @@ class WelcomeScreen extends StatelessWidget {
                                             height: 34,
                                             child: FilledButton(
                                               onPressed: null,
-                                              style:
-                                                  FilledButton.styleFrom(
-                                                backgroundColor:
-                                                    gatherlyBlue,
-                                                foregroundColor:
-                                                    Colors.white,
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor: gatherlyBlue,
+                                                foregroundColor: Colors.white,
                                                 disabledBackgroundColor:
                                                     gatherlyBlue,
                                                 disabledForegroundColor:
                                                     Colors.white,
-                                                shape:
-                                                    RoundedRectangleBorder(
+                                                shape: RoundedRectangleBorder(
                                                   borderRadius:
-                                                      BorderRadius.circular(
-                                                    8,
-                                                  ),
+                                                      BorderRadius.circular(8),
                                                 ),
                                               ),
                                               child: const Text(
                                                 'Open dashboard',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                ),
+                                                style: TextStyle(fontSize: 10),
                                               ),
                                             ),
                                           ),
@@ -758,16 +715,13 @@ class WelcomeScreen extends StatelessWidget {
                             ),
 
                             const SizedBox(height: 38),
-                            const Divider(
-                              color: Color(0xFF45495A),
-                            ),
+                            const Divider(color: Color(0xFF45495A)),
                             const SizedBox(height: 20),
                             const Center(
                               child: Column(
                                 children: [
                                   Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       CircleAvatar(
                                         radius: 13,
@@ -844,10 +798,7 @@ class WelcomeScreen extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: gatherlyInk,
-              fontSize: 9,
-            ),
+            style: const TextStyle(color: gatherlyInk, fontSize: 9),
           ),
         ],
       ),
@@ -928,19 +879,14 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _footerInfoCard({
-    required String title,
-    required String description,
-  }) {
+  Widget _footerInfoCard({required String title, required String description}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: const Color(0xFF383D50),
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(
-          color: const Color(0xFF484D60),
-        ),
+        border: Border.all(color: const Color(0xFF484D60)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -956,10 +902,7 @@ class WelcomeScreen extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             description,
-            style: const TextStyle(
-              color: Color(0xFFB6B9C8),
-              fontSize: 10,
-            ),
+            style: const TextStyle(color: Color(0xFFB6B9C8), fontSize: 10),
           ),
         ],
       ),

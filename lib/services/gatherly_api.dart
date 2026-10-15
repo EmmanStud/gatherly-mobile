@@ -48,12 +48,14 @@ class GatherlyApi {
 
   final http.Client _client;
   final String _baseUrl;
+  void Function()? onUnauthorized;
 
   Future<EmailVerificationStatus> emailStatus(String email) async {
     final response = await _request(
       'POST',
       '/auth/email-verification/status',
       body: {'email': email},
+      authenticated: false,
     );
     return EmailVerificationStatus(
       verified: response['verified'] == true,
@@ -66,6 +68,7 @@ class GatherlyApi {
       'POST',
       '/auth/email-verification/send',
       body: {'name': name, 'email': email},
+      authenticated: false,
     );
   }
 
@@ -74,6 +77,7 @@ class GatherlyApi {
       'POST',
       '/auth/email-verification/verify',
       body: {'email': email, 'code': code},
+      authenticated: false,
     );
   }
 
@@ -86,6 +90,7 @@ class GatherlyApi {
       'POST',
       '/auth/register',
       body: {'name': name, 'email': email, 'password': password},
+      authenticated: false,
     );
     return _saveAuthResult(response);
   }
@@ -95,6 +100,7 @@ class GatherlyApi {
       'POST',
       '/auth/login',
       body: {'email': email, 'password': password},
+      authenticated: false,
     );
     return _saveAuthResult(response);
   }
@@ -102,7 +108,12 @@ class GatherlyApi {
   Future<AuthUser?> currentUser() async {
     final token = await _readToken();
     if (token == null) return null;
-    final response = await _request('GET', '/auth/session', token: token);
+    final response = await _request(
+      'GET',
+      '/auth/session',
+      token: token,
+      authenticated: true,
+    );
     final data = response['user'];
     if (data == null) {
       await _removeToken();
@@ -118,7 +129,13 @@ class GatherlyApi {
     final token = await _readToken();
     try {
       if (token != null) {
-        await _request('POST', '/auth/logout', token: token, allowEmpty: true);
+        await _request(
+          'POST',
+          '/auth/logout',
+          token: token,
+          allowEmpty: true,
+          authenticated: true,
+        );
       }
     } finally {
       await _removeToken();
@@ -130,6 +147,7 @@ class GatherlyApi {
       'POST',
       '/auth/password-reset/send',
       body: {'email': email},
+      authenticated: false,
     );
     return _message(response);
   }
@@ -142,6 +160,7 @@ class GatherlyApi {
       'POST',
       '/auth/password-reset/verify',
       body: {'email': email, 'code': code},
+      authenticated: false,
     );
     final token = response['resetToken'];
     if (token is! String || token.isEmpty) {
@@ -165,6 +184,39 @@ class GatherlyApi {
         'newPassword': newPassword,
         'confirmNewPassword': confirmNewPassword,
       },
+      authenticated: false,
+    );
+    return _message(response);
+  }
+
+  Future<AuthUser> updateProfile({required String name}) async {
+    final response = await _request(
+      'PATCH',
+      '/auth/profile',
+      body: {'name': name},
+      authenticated: true,
+    );
+    final data = response['user'];
+    if (data is! Map) {
+      throw const FormatException('The server returned an invalid profile.');
+    }
+    return AuthUser.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Future<String> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmNewPassword,
+  }) async {
+    final response = await _request(
+      'POST',
+      '/auth/change-password',
+      body: {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+        'confirmNewPassword': confirmNewPassword,
+      },
+      authenticated: true,
     );
     return _message(response);
   }
@@ -199,6 +251,7 @@ class GatherlyApi {
     Map<String, Object?>? body,
     String? token,
     bool allowEmpty = false,
+    required bool authenticated,
   }) async {
     final baseUrl = _baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
     if (baseUrl.isEmpty) {
@@ -216,7 +269,7 @@ class GatherlyApi {
 
     final headers = <String, String>{'Accept': 'application/json'};
     if (body != null) headers['Content-Type'] = 'application/json';
-    final authToken = token ?? await _readToken();
+    final authToken = token ?? (authenticated ? await _readToken() : null);
     if (authToken != null) headers['Authorization'] = 'Bearer $authToken';
 
     late http.Response response;
@@ -231,6 +284,11 @@ class GatherlyApi {
     }
 
     if (allowEmpty && response.statusCode == 204) return {};
+
+    if (response.statusCode == 401 && authenticated) {
+      await _removeToken();
+      onUnauthorized?.call();
+    }
 
     Map<String, dynamic> data;
     try {

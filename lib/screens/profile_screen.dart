@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/format.dart';
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 
@@ -19,6 +20,9 @@ class _ProfilePanelState extends State<ProfilePanel> {
   late final TextEditingController _email;
   late final TextEditingController _phone;
   late final TextEditingController _organization;
+  bool _isSaving = false;
+  String? _errorMessage;
+  String? _successMessage;
 
   @override
   void initState() {
@@ -40,21 +44,38 @@ class _ProfilePanelState extends State<ProfilePanel> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    AppScope.of(context).updateProfile(
-      Profile(
-        name: _name.text.trim(),
-        email: _email.text.trim(),
-        phone: _phone.text.trim(),
-        organization: _organization.text.trim(),
-      ),
-    );
-    showToast(context, 'Profile changes saved.');
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
+    try {
+      await AppScope.of(context).updateProfile(
+        Profile(
+          name: _name.text.trim(),
+          email: _email.text.trim(),
+          phone: _phone.text.trim(),
+          organization: _organization.text.trim(),
+        ),
+      );
+      if (mounted) setState(() => _successMessage = 'Profile changes saved.');
+    } on GatherlyApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Unable to save your profile. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   Widget _field(String label, TextEditingController controller,
-      {String? Function(String?)? validator, TextInputType? keyboardType}) {
+      {String? Function(String?)? validator,
+      TextInputType? keyboardType,
+      bool readOnly = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -63,6 +84,7 @@ class _ProfilePanelState extends State<ProfilePanel> {
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          readOnly: readOnly,
           validator: validator ?? requiredField,
         ),
       ],
@@ -140,17 +162,52 @@ class _ProfilePanelState extends State<ProfilePanel> {
           children: [
             const PanelTitle('Personal information', 'These details appear on your organizer account.'),
             const SizedBox(height: 24),
-            _field('Full name', _name),
+            _field(
+              'Full name',
+              _name,
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'This field is required.';
+                }
+                if (value.trim().length > 100) {
+                  return 'Name must be 100 characters or fewer.';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 18),
-            _field('Email address', _email, validator: emailField, keyboardType: TextInputType.emailAddress),
+            _field(
+              'Email address',
+              _email,
+              validator: emailField,
+              keyboardType: TextInputType.emailAddress,
+              readOnly: true,
+            ),
             const SizedBox(height: 18),
             _field('Mobile number', _phone, keyboardType: TextInputType.phone),
             const SizedBox(height: 18),
             _field('Organization', _organization),
             const SizedBox(height: 24),
+            if (_errorMessage != null) ...[
+              _messageBanner(_errorMessage!, isError: true),
+              const SizedBox(height: 12),
+            ],
+            if (_successMessage != null) ...[
+              _messageBanner(_successMessage!, isError: false),
+              const SizedBox(height: 12),
+            ],
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(onPressed: _save, child: const Text('Save profile')),
+              child: FilledButton(
+                onPressed: _isSaving ? null : _save,
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save profile'),
+              ),
             ),
           ],
         ),
@@ -158,5 +215,29 @@ class _ProfilePanelState extends State<ProfilePanel> {
     );
 
     return TwoColumn(left: card, right: form, leftFlex: 7, rightFlex: 13, breakpoint: 900);
+  }
+
+  Widget _messageBanner(String message, {required bool isError}) {
+    final color = isError ? AppColors.danger : const Color(0xFF287A4B);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message, style: TextStyle(color: color, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
   }
 }

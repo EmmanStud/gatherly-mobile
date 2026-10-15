@@ -20,15 +20,21 @@ class GatherlyApp extends StatefulWidget {
 
 class _GatherlyAppState extends State<GatherlyApp> {
   final AppState _state = AppState();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
     _state.addListener(_onStateChanged);
+    _state.onSessionExpired = _returnToWelcome;
     _state.restoreSession();
   }
 
   void _onStateChanged() => setState(() {});
+
+  void _returnToWelcome() {
+    _navigatorKey.currentState?.pushNamedAndRemoveUntil('/', (route) => false);
+  }
 
   @override
   void dispose() {
@@ -44,6 +50,7 @@ class _GatherlyAppState extends State<GatherlyApp> {
     return AppScope(
       state: _state,
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: 'Gatherly',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
