@@ -270,13 +270,6 @@ class GatherlyApi {
   Future<List<Order>> getOrders() async =>
       _list(await _request('GET', '/orders', authenticated: true), Order.fromJson);
 
-  Future<Order> refundOrder(String id) async => Order.fromJson(await _request(
-    'PATCH',
-    '/orders/${Uri.encodeComponent(id)}',
-    body: {'status': 'Refunded'},
-    authenticated: true,
-  ));
-
   Future<List<Attendee>> getAttendees() async => _list(
     await _request('GET', '/attendees', authenticated: true),
     Attendee.fromJson,

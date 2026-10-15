@@ -190,12 +190,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refundOrder(String id) async {
-    final updated = await _api.refundOrder(id);
-    _orders = _orders.map((order) => order.id == id ? updated : order).toList();
-    notifyListeners();
-  }
-
   Future<void> setCheckedIn(String id, bool checkedIn) async {
     final updated = await _api.setCheckedIn(id, checkedIn);
     _attendees = _attendees.map((person) => person.id == id ? updated : person).toList();

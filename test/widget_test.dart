@@ -2,8 +2,13 @@ import 'dart:convert';
 
 import 'package:final_project/models/models.dart';
 import 'package:final_project/core/analytics.dart';
+import 'package:final_project/core/format.dart';
+import 'package:final_project/screens/attendees_screen.dart';
+import 'package:final_project/screens/orders_screen.dart';
 import 'package:final_project/services/gatherly_api.dart';
+import 'package:final_project/state/app_state.dart';
 import 'package:final_project/widgets/common.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -24,6 +29,116 @@ void main() {
       expect(passwordField('Gatherly9'), isNotNull);
       expect(passwordField('Aa1!'), isNotNull);
     });
+  });
+
+  group('isEventDateToday', () {
+    final manilaNow = DateTime.now().toUtc().add(const Duration(hours: 8));
+    final today =
+        '${manilaNow.year.toString().padLeft(4, '0')}-'
+        '${manilaNow.month.toString().padLeft(2, '0')}-'
+        '${manilaNow.day.toString().padLeft(2, '0')}';
+    final todayDate = DateTime.utc(
+      manilaNow.year,
+      manilaNow.month,
+      manilaNow.day,
+    );
+    String dateOffset(int days) =>
+        todayDate.add(Duration(days: days)).toIso8601String().substring(0, 10);
+
+    test('matches today for a single-day event', () {
+      expect(isEventDateToday(today, '', false), isTrue);
+    });
+
+    test('does not match tomorrow for a single-day event', () {
+      expect(isEventDateToday(dateOffset(1), '', false), isFalse);
+    });
+
+    test('matches today inside a multi-day range', () {
+      expect(isEventDateToday(dateOffset(-1), dateOffset(1), true), isTrue);
+    });
+
+    test('does not match a range that has already ended', () {
+      expect(isEventDateToday(dateOffset(-3), dateOffset(-1), true), isFalse);
+    });
+
+    test('rejects invalid dates', () {
+      expect(isEventDateToday('2026-02-30', '', false), isFalse);
+    });
+  });
+
+  testWidgets('orders remain read-only at narrow and wide widths', (
+    tester,
+  ) async {
+    final state = await _organizerState(eventDate: _manilaToday());
+    addTearDown(state.dispose);
+
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_screenWithState(state, const OrdersPanel()));
+    await tester.pumpAndSettle();
+    expect(find.text('Refund'), findsNothing);
+    expect(find.text('Paid'), findsOneWidget);
+    expect(find.text('General Admission'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(1280, 900);
+    await tester.pumpWidget(_screenWithState(state, const OrdersPanel()));
+    await tester.pumpAndSettle();
+    expect(find.text('Refund'), findsNothing);
+    expect(find.text('Paid'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('attendees can only check in on the event date and undo', (
+    tester,
+  ) async {
+    final tomorrow = _dateOffset(1);
+    final futureState = await _organizerState(eventDate: tomorrow);
+    addTearDown(futureState.dispose);
+    await tester.pumpWidget(
+      _screenWithState(futureState, const AttendeesPanel()),
+    );
+    await tester.pumpAndSettle();
+
+    final checkInButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Check in'),
+    );
+    expect(checkInButton.onPressed, isNull);
+    expect(find.text('Available on event date'), findsOneWidget);
+
+    final todayState = await _organizerState(eventDate: _manilaToday());
+    addTearDown(todayState.dispose);
+    await tester.pumpWidget(
+      _screenWithState(todayState, const AttendeesPanel()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Check in'))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Check in'));
+    await tester.pumpAndSettle();
+    expect(find.text('Check in Mina Cruz?'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, 'Check in'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Attendee checked in.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Checked in'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Checked in'));
+    await tester.pumpAndSettle();
+    expect(find.text('Check-in undone.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Check in'), findsOneWidget);
   });
 
   test('login saves the bearer token and logout removes it', () async {
@@ -320,4 +435,118 @@ void main() {
     expect(notified, isTrue);
     api.close();
   });
+}
+
+Widget _screenWithState(AppState state, Widget screen) => AppScope(
+  state: state,
+  child: MaterialApp(
+    home: Scaffold(body: SingleChildScrollView(child: screen)),
+  ),
+);
+
+Future<AppState> _organizerState({required String eventDate}) async {
+  SharedPreferences.setMockInitialValues({
+    'gatherly_session_token': 'widget-test-token',
+  });
+  final api = GatherlyApi(
+    client: MockClient((request) async {
+      if (request.method == 'GET' && request.url.path == '/api/events') {
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 'event-1',
+              'name': 'Gatherly Meetup',
+              'date': eventDate,
+              'time': '18:00',
+              'multipleDay': false,
+              'endDate': '',
+              'eventCode': 'EVT1234',
+              'status': 'On sale',
+            },
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'GET' && request.url.path == '/api/orders') {
+        return http.Response(
+          jsonEncode([
+            {
+              'id': 'order-1',
+              'number': 'ORD-1',
+              'buyer': 'Mina Cruz',
+              'email': 'mina@example.com',
+              'event': 'Gatherly Meetup',
+              'eventId': 'event-1',
+              'eventCode': 'EVT1234',
+              'ticket': 'General Admission',
+              'amountCents': 250000,
+              'status': 'Paid',
+              'paidAt': '2026-10-15T00:00:00Z',
+            },
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'GET' && request.url.path == '/api/attendees') {
+        return http.Response(
+          jsonEncode([_attendeeJson(eventDate, checkedIn: false)]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (request.method == 'PATCH' &&
+          request.url.path == '/api/attendees/attendee-1') {
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode(
+            _attendeeJson(eventDate, checkedIn: body['checkedIn'] == true),
+          ),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      return http.Response('{"error":"Unexpected request."}', 500);
+    }),
+    baseUrl: 'http://localhost:4000/api',
+  );
+  final state = AppState(api: api);
+  state.signIn(
+    const AuthUser(
+      name: 'Gatherly Organizer',
+      email: 'organizer@example.com',
+      accountType: 'organizer',
+    ),
+  );
+  return state;
+}
+
+Map<String, Object?> _attendeeJson(
+  String eventDate, {
+  required bool checkedIn,
+}) => {
+  'id': 'attendee-1',
+  'name': 'Mina Cruz',
+  'email': 'mina@example.com',
+  'event': 'Gatherly Meetup',
+  'eventId': 'event-1',
+  'eventCode': 'EVT1234',
+  'ticket': 'General Admission',
+  'orderNumber': 'ORD-1',
+  'checkedIn': checkedIn,
+  'date': eventDate,
+  'endDate': '',
+};
+
+String _manilaToday() {
+  final now = DateTime.now().toUtc().add(const Duration(hours: 8));
+  return '${now.year.toString().padLeft(4, '0')}-'
+      '${now.month.toString().padLeft(2, '0')}-'
+      '${now.day.toString().padLeft(2, '0')}';
+}
+
+String _dateOffset(int days) {
+  final today = DateTime.parse('${_manilaToday()}T00:00:00Z');
+  return today.add(Duration(days: days)).toIso8601String().substring(0, 10);
 }

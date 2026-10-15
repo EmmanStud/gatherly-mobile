@@ -11,6 +11,27 @@ const _weekdays = [
   'Friday', 'Saturday', 'Sunday',
 ];
 
+bool isEventDateToday(String date, String endDate, bool multipleDay) {
+  bool isValidDate(String value) {
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return false;
+    final parts = value.split('-').map(int.parse).toList();
+    final parsed = DateTime.utc(parts[0], parts[1], parts[2]);
+    return parsed.year == parts[0] &&
+        parsed.month == parts[1] &&
+        parsed.day == parts[2];
+  }
+
+  final eventEndDate = multipleDay ? endDate : date;
+  if (!isValidDate(date) || !isValidDate(eventEndDate)) return false;
+
+  final manilaToday = DateTime.now().toUtc().add(const Duration(hours: 8));
+  final today =
+      '${manilaToday.year.toString().padLeft(4, '0')}-'
+      '${manilaToday.month.toString().padLeft(2, '0')}-'
+      '${manilaToday.day.toString().padLeft(2, '0')}';
+  return date.compareTo(today) <= 0 && today.compareTo(eventEndDate) <= 0;
+}
+
 /// 18 Oct 2026
 String formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
 

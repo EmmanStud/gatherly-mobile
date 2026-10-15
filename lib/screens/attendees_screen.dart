@@ -19,8 +19,25 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
 
   Future<void> _toggle(Attendee person) async {
     final state = AppScope.of(context);
+    final checkingIn = !person.checkedIn;
+    if (checkingIn) {
+      final confirmed = await confirmDialog(
+        context,
+        title: 'Check in ${person.name}?',
+        message: 'This will mark ${person.name} as checked in.',
+        confirmLabel: 'Check in',
+      );
+      if (!confirmed || !mounted) return;
+    }
+
     try {
-      await state.setCheckedIn(person.id, !person.checkedIn);
+      await state.setCheckedIn(person.id, checkingIn);
+      if (mounted) {
+        showToast(
+          context,
+          checkingIn ? 'Attendee checked in.' : 'Check-in undone.',
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       await showDialog<void>(
@@ -93,18 +110,49 @@ class _AttendeesPanelState extends State<AttendeesPanel> {
           for (final person in attendees)
             _AttendeeRow(
               person: person,
+              canCheckIn: _isEventDay(state.events, person),
               onToggle: () => _toggle(person),
             ),
         ],
       ),
     );
   }
+
+  bool _isEventDay(List<Event> events, Attendee person) {
+    Event? event;
+    for (final candidate in events) {
+      final matchesId =
+          person.eventId.isNotEmpty && candidate.id == person.eventId;
+      final matchesCode =
+          person.eventCode.isNotEmpty &&
+          candidate.eventCode.isNotEmpty &&
+          candidate.eventCode == person.eventCode;
+      if (matchesId || matchesCode) {
+        event = candidate;
+        break;
+      }
+    }
+
+    if (event != null) {
+      return isEventDateToday(event.date, event.endDate, event.multipleDay);
+    }
+    return isEventDateToday(
+      person.date,
+      person.endDate,
+      person.endDate.isNotEmpty,
+    );
+  }
 }
 
 class _AttendeeRow extends StatelessWidget {
-  const _AttendeeRow({required this.person, required this.onToggle});
+  const _AttendeeRow({
+    required this.person,
+    required this.canCheckIn,
+    required this.onToggle,
+  });
 
   final Attendee person;
+  final bool canCheckIn;
   final Future<void> Function() onToggle;
 
   @override
@@ -138,16 +186,38 @@ class _AttendeeRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          FilledButton(
-            onPressed: onToggle,
-            style: FilledButton.styleFrom(
-              backgroundColor: checked ? AppColors.kpiGreenBg : AppColors.primary,
-              foregroundColor: checked ? const Color(0xFF597450) : Colors.white,
-              minimumSize: const Size(0, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+          SizedBox(
+            width: 130,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton(
+                  onPressed: checked || canCheckIn ? onToggle : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        checked ? AppColors.kpiGreenBg : AppColors.primary,
+                    foregroundColor:
+                        checked ? const Color(0xFF597450) : Colors.white,
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  child: Text(checked ? 'Checked in' : 'Check in'),
+                ),
+                if (!checked && !canCheckIn)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Available on event date',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 10, color: AppColors.muted),
+                    ),
+                  ),
+              ],
             ),
-            child: Text(checked ? 'Undo' : 'Check in'),
           ),
         ],
       ),
