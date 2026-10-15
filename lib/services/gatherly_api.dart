@@ -221,6 +221,91 @@ class GatherlyApi {
     return _message(response);
   }
 
+  Future<List<Event>> getEvents() async =>
+      _list(await _request('GET', '/events', authenticated: true), Event.fromJson);
+
+  Future<Event> createEvent(Event event) async =>
+      Event.fromJson(await _request(
+        'POST',
+        '/events',
+        body: event.toJson(),
+        authenticated: true,
+      ));
+
+  Future<Event> updateEvent(Event event) async =>
+      Event.fromJson(await _request(
+        'PATCH',
+        '/events/${Uri.encodeComponent(event.id)}',
+        body: event.toJson(),
+        authenticated: true,
+      ));
+
+  Future<Event> publishEvent(String id) async => Event.fromJson(await _request(
+    'PATCH',
+    '/events/${Uri.encodeComponent(id)}/publish',
+    authenticated: true,
+  ));
+
+  Future<Event> finishEvent(String id) async => Event.fromJson(await _request(
+    'PATCH',
+    '/events/${Uri.encodeComponent(id)}/finish',
+    authenticated: true,
+  ));
+
+  Future<Event> cancelEvent(String id) async => Event.fromJson(await _request(
+    'PATCH',
+    '/events/${Uri.encodeComponent(id)}/cancel',
+    authenticated: true,
+  ));
+
+  Future<void> deleteEvent(String id) async {
+    await _request(
+      'DELETE',
+      '/events/${Uri.encodeComponent(id)}',
+      authenticated: true,
+      allowEmpty: true,
+    );
+  }
+
+  Future<List<Order>> getOrders() async =>
+      _list(await _request('GET', '/orders', authenticated: true), Order.fromJson);
+
+  Future<Order> refundOrder(String id) async => Order.fromJson(await _request(
+    'PATCH',
+    '/orders/${Uri.encodeComponent(id)}',
+    body: {'status': 'Refunded'},
+    authenticated: true,
+  ));
+
+  Future<List<Attendee>> getAttendees() async => _list(
+    await _request('GET', '/attendees', authenticated: true),
+    Attendee.fromJson,
+  );
+
+  Future<Attendee> setCheckedIn(String id, bool checkedIn) async =>
+      Attendee.fromJson(await _request(
+        'PATCH',
+        '/attendees/${Uri.encodeComponent(id)}',
+        body: {'checkedIn': checkedIn},
+        authenticated: true,
+      ));
+
+  List<T> _list<T>(
+    Map<String, dynamic> response,
+    T Function(Map<String, dynamic>) parse,
+  ) {
+    final raw = response['data'];
+    if (raw is! List) {
+      throw const FormatException('The server returned an invalid list.');
+    }
+    return raw.map((item) {
+      if (item is! Map) {
+        throw const FormatException('The server returned an invalid list item.');
+      }
+      return parse(Map<String, dynamic>.from(item));
+    }).toList();
+  }
+
   void close() => _client.close();
 
   Future<AuthResult> _saveAuthResult(Map<String, dynamic> response) async {
@@ -293,8 +378,13 @@ class GatherlyApi {
     Map<String, dynamic> data;
     try {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      if (decoded is! Map) throw const FormatException();
-      data = Map<String, dynamic>.from(decoded);
+      if (decoded is Map) {
+        data = Map<String, dynamic>.from(decoded);
+      } else if (decoded is List) {
+        data = {'data': decoded};
+      } else {
+        throw const FormatException();
+      }
     } on FormatException {
       throw const GatherlyApiException('The server returned an invalid response.');
     }

@@ -11,72 +11,16 @@ class AppState extends ChangeNotifier {
   final GatherlyApi _api;
   AuthUser? _user;
   bool _isRestoringSession = true;
+  bool _isLoadingData = false;
   String? _sessionRestoreError;
+  String? _dataError;
   void Function()? onSessionExpired;
-
-  final List<Event> _events = [
-    Event(
-      id: 1,
-      name: 'Manila Creatives Summit 2026',
-      startAt: DateTime(2026, 10, 18, 9, 0),
-      venue: 'SMX Convention Center, Pasay',
-      sold: 342,
-      capacity: 500,
-      status: EventStatus.onSale,
-    ),
-    Event(
-      id: 2,
-      name: 'Makati Founders Night',
-      startAt: DateTime(2026, 10, 24, 19, 30),
-      venue: 'The Astbury, Makati',
-      sold: 186,
-      capacity: 250,
-      status: EventStatus.onSale,
-    ),
-    Event(
-      id: 3,
-      name: 'Philippine Product Summit',
-      startAt: DateTime(2026, 11, 6, 10, 0),
-      venue: 'Online event · Philippines',
-      sold: 920,
-      capacity: 1200,
-      status: EventStatus.draft,
-    ),
-    Event(
-      id: 4,
-      name: 'Cebu Creatives Morning',
-      startAt: DateTime(2026, 11, 15, 8, 30),
-      venue: 'Ayala Center Cebu',
-      sold: 98,
-      capacity: 150,
-      status: EventStatus.onSale,
-    ),
-  ];
-
-  List<Order> _orders = const [
-    Order(id: 'PH1048', buyer: 'Nicole Macalalad', eventName: 'Manila Creatives Summit 2026', amountCentavos: 250000),
-    Order(id: 'PH1047', buyer: 'Emman Agazon', eventName: 'Makati Founders Night', amountCentavos: 180000),
-    Order(id: 'PH1046', buyer: 'Jamie Anne Brizal', eventName: 'Cebu Creatives Morning', amountCentavos: 95000),
-  ];
-
-  List<Attendee> _attendees = const [
-    Attendee(id: 1, name: 'Emman Agazon', eventName: 'Manila Creatives Summit 2026', ticket: 'VIP Pass', checkedIn: true),
-    Attendee(id: 2, name: 'Nicole Macalalad', eventName: 'Manila Creatives Summit 2026', ticket: 'Regular'),
-    Attendee(id: 3, name: 'Jamie Anne Brizal', eventName: 'Makati Founders Night', ticket: 'Early Bird'),
-    Attendee(id: 4, name: 'Diomella Agustin', eventName: 'Cebu Creatives Morning', ticket: 'Regular', checkedIn: true),
-  ];
-
+  List<Event> _events = [];
+  List<Order> _orders = [];
+  List<Attendee> _attendees = [];
   Profile _profile = const Profile(name: '', email: '', phone: '', organization: '');
-
   Preferences _preferences = const Preferences();
-  int _nextEventId = 5;
 
-  // Demo figures from the design. They cannot be derived until ticket
-  // prices and an attendee registry exist in the backend.
-  final int demoRevenueCentavos = 279545000;
-  final int demoAttendeeCount = 1204;
-
-  // ---- read ----
   List<Event> get events => List.unmodifiable(_events);
   List<Order> get orders => List.unmodifiable(_orders);
   List<Attendee> get attendees => List.unmodifiable(_attendees);
@@ -86,7 +30,9 @@ class AppState extends ChangeNotifier {
   GatherlyApi get api => _api;
   bool get isAuthenticated => _user != null;
   bool get isRestoringSession => _isRestoringSession;
+  bool get isLoadingData => _isLoadingData;
   String? get sessionRestoreError => _sessionRestoreError;
+  String? get dataError => _dataError;
 
   Future<void> restoreSession() async {
     _isRestoringSession = true;
@@ -94,7 +40,10 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final user = await _api.currentUser();
-      if (user != null) signIn(user);
+      if (user != null) {
+        _setUser(user);
+        await loadOrganizerData();
+      }
     } catch (error) {
       if (error is! GatherlyApiException || error.statusCode != 401) {
         _sessionRestoreError = error.toString();
@@ -111,6 +60,11 @@ class AppState extends ChangeNotifier {
   }
 
   void signIn(AuthUser user) {
+    _setUser(user);
+    loadOrganizerData();
+  }
+
+  void _setUser(AuthUser user) {
     _user = user;
     _profile = Profile(
       name: user.name,
@@ -121,8 +75,37 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadOrganizerData() async {
+    if (_user == null) return;
+    _isLoadingData = true;
+    _dataError = null;
+    notifyListeners();
+    try {
+      final results = await Future.wait<Object>([
+        _api.getEvents(),
+        _api.getOrders(),
+        _api.getAttendees(),
+      ]);
+      _events = results[0] as List<Event>;
+      _orders = results[1] as List<Order>;
+      _attendees = results[2] as List<Attendee>;
+    } catch (error) {
+      if (error is! GatherlyApiException || error.statusCode != 401) {
+        _dataError = error is GatherlyApiException
+            ? error.message
+            : 'Unable to load organizer data. Please try again.';
+      }
+    } finally {
+      _isLoadingData = false;
+      notifyListeners();
+    }
+  }
+
   void _handleUnauthorized() {
     _user = null;
+    _events = [];
+    _orders = [];
+    _attendees = [];
     _profile = Profile(
       name: '',
       email: '',
@@ -130,12 +113,17 @@ class AppState extends ChangeNotifier {
       organization: _profile.organization,
     );
     _sessionRestoreError = null;
+    _dataError = null;
     notifyListeners();
     onSessionExpired?.call();
   }
 
   Future<void> signOut() async {
     _user = null;
+    _events = [];
+    _orders = [];
+    _attendees = [];
+    _profile = const Profile(name: '', email: '', phone: '', organization: '');
     notifyListeners();
     await _api.logout();
   }
@@ -146,99 +134,143 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 
-  int get ticketsSold => _events.fold(0, (sum, e) => sum + e.sold);
+  int get ticketsSold => _events.fold(0, (sum, event) => sum + event.sold);
   int get activeEvents =>
-      _events.where((e) => e.status == EventStatus.onSale).length;
+      _events.where((event) => event.status == EventStatus.onSale).length;
   int get draftEvents =>
-      _events.where((e) => e.status == EventStatus.draft).length;
-  int get checkedInCount => _attendees.where((a) => a.checkedIn).length;
-  int get paidOrderCount => _orders.where((o) => !o.refunded).length;
+      _events.where((event) => event.status == EventStatus.draft).length;
+  int get checkedInCount => _attendees.where((person) => person.checkedIn).length;
+  int get paidOrderCount => _orders.where((order) => order.status == 'Paid').length;
+  int get revenueCents => _orders
+      .where((order) => order.status == 'Paid')
+      .fold(0, (sum, order) => sum + order.amountCents);
 
-  /// The soonest on-sale event that has not started yet.
   Event? get nextEvent {
     final now = DateTime.now();
     final upcoming = _events
-        .where((e) => e.status == EventStatus.onSale && e.startAt.isAfter(now))
+        .where((event) =>
+            event.status == EventStatus.onSale && event.startAt.isAfter(now))
         .toList()
       ..sort((a, b) => a.startAt.compareTo(b.startAt));
     return upcoming.isEmpty ? null : upcoming.first;
   }
 
-  Event? eventById(int id) {
-    for (final e in _events) {
-      if (e.id == id) return e;
+  Event? eventById(String id) {
+    for (final event in _events) {
+      if (event.id == id) return event;
     }
     return null;
   }
 
-  // ---- events ----
-  void addEvent({
-    required String name,
-    required DateTime startAt,
-    required String venue,
-    required int capacity,
-  }) {
-    _events.insert(
-      0,
-      Event(
-        id: _nextEventId++,
-        name: name,
-        startAt: startAt,
-        venue: venue,
-        sold: 0,
-        capacity: capacity,
-      ),
-    );
-    notifyListeners();
+  Future<void> saveEvent(Event event) async {
+    final saved = event.id.isEmpty
+        ? await _api.createEvent(event)
+        : await _api.updateEvent(event);
+    _replaceEvent(saved);
   }
 
-  void updateEvent(
-    int id, {
+  Future<void> addEvent({
+    required String name,
+    required DateTime startAt,
+    required String venue,
+    required int capacity,
+  }) => saveEvent(_eventFromLegacyFields(
+    name: name, startAt: startAt, venue: venue, capacity: capacity,
+  ));
+
+  Future<void> updateEvent(
+    String id, {
     required String name,
     required DateTime startAt,
     required String venue,
     required int capacity,
   }) {
-    final index = _events.indexWhere((e) => e.id == id);
-    if (index < 0) return;
-    _events[index] = _events[index].copyWith(
+    final existing = eventById(id);
+    if (existing == null) return Future.error(
+      const GatherlyApiException('Event not found.'),
+    );
+    return saveEvent(_eventFromLegacyFields(
+      id: id,
       name: name,
       startAt: startAt,
       venue: venue,
       capacity: capacity,
+      existing: existing,
+    ));
+  }
+
+  Event _eventFromLegacyFields({
+    String id = '',
+    required String name,
+    required DateTime startAt,
+    required String venue,
+    required int capacity,
+    Event? existing,
+  }) => Event(
+    id: id,
+    name: name,
+    date: '${startAt.year.toString().padLeft(4, '0')}-${startAt.month.toString().padLeft(2, '0')}-${startAt.day.toString().padLeft(2, '0')}',
+    time: '${startAt.hour.toString().padLeft(2, '0')}:${startAt.minute.toString().padLeft(2, '0')}',
+    multipleDay: existing?.multipleDay ?? false,
+    endDate: existing?.endDate ?? '',
+    venue: venue,
+    description: existing?.description ?? '',
+    category: existing?.category ?? '',
+    headliner: existing?.headliner ?? '',
+    total: capacity,
+    sold: existing?.sold ?? 0,
+    eventCode: existing?.eventCode ?? '',
+    registrationUrl: existing?.registrationUrl ?? '',
+    pricingMode: existing?.pricingMode ?? 'free',
+    priceCents: existing?.priceCents ?? 0,
+    ticketTypes: existing?.ticketTypes ?? const [],
+    status: existing?.status ?? EventStatus.draft,
+  );
+
+  Future<void> toggleCheckIn(String id) {
+    final attendee = _attendees.where((person) => person.id == id).firstOrNull;
+    if (attendee == null) return Future.error(
+      const GatherlyApiException('Attendee not found.'),
     );
+    return setCheckedIn(id, !attendee.checkedIn);
+  }
+
+  void setEventStatus(String id, EventStatus status) {
+    if (status == EventStatus.onSale) publishEvent(id);
+  }
+
+  Future<void> publishEvent(String id) async => _replaceEvent(await _api.publishEvent(id));
+  Future<void> finishEvent(String id) async => _replaceEvent(await _api.finishEvent(id));
+  Future<void> cancelEvent(String id) async => _replaceEvent(await _api.cancelEvent(id));
+
+  Future<void> deleteEvent(String id) async {
+    await _api.deleteEvent(id);
+    _events = _events.where((event) => event.id != id).toList();
     notifyListeners();
   }
 
-  void setEventStatus(int id, EventStatus status) {
-    final index = _events.indexWhere((e) => e.id == id);
-    if (index < 0) return;
-    _events[index] = _events[index].copyWith(status: status);
+  Future<void> refundOrder(String id) async {
+    final updated = await _api.refundOrder(id);
+    _orders = _orders.map((order) => order.id == id ? updated : order).toList();
     notifyListeners();
   }
 
-  void deleteEvent(int id) {
-    _events.removeWhere((e) => e.id == id);
+  Future<void> setCheckedIn(String id, bool checkedIn) async {
+    final updated = await _api.setCheckedIn(id, checkedIn);
+    _attendees = _attendees.map((person) => person.id == id ? updated : person).toList();
     notifyListeners();
   }
 
-  // ---- orders / attendees ----
-  void refundOrder(String id) {
-    _orders = [
-      for (final o in _orders) o.id == id ? o.copyWith(refunded: true) : o,
-    ];
+  void _replaceEvent(Event updated) {
+    final index = _events.indexWhere((event) => event.id == updated.id);
+    if (index < 0) {
+      _events = [updated, ..._events];
+    } else {
+      _events = [..._events]..[index] = updated;
+    }
     notifyListeners();
   }
 
-  void toggleCheckIn(int id) {
-    _attendees = [
-      for (final a in _attendees)
-        a.id == id ? a.copyWith(checkedIn: !a.checkedIn) : a,
-    ];
-    notifyListeners();
-  }
-
-  // ---- profile / settings ----
   Future<void> updateProfile(Profile profile) async {
     final user = await _api.updateProfile(name: profile.name);
     _user = user;
@@ -259,7 +291,7 @@ class AppState extends ChangeNotifier {
 
 class AppScope extends InheritedNotifier<AppState> {
   const AppScope({super.key, required AppState state, required super.child})
-      : super(notifier: state);
+    : super(notifier: state);
 
   static AppState of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
