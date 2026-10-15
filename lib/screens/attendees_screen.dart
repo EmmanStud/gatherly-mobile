@@ -3,16 +3,43 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/format.dart';
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 
-class AttendeesPanel extends StatelessWidget {
+class AttendeesPanel extends StatefulWidget {
   const AttendeesPanel({super.key});
+
+  @override
+  State<AttendeesPanel> createState() => _AttendeesPanelState();
+}
+
+class _AttendeesPanelState extends State<AttendeesPanel> {
+  String? _eventFilter;
+
+  Future<void> _toggle(Attendee person) async {
+    final state = AppScope.of(context);
+    try {
+      await state.setCheckedIn(person.id, !person.checkedIn);
+    } catch (error) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Could not update check-in'),
+          content: Text(error is GatherlyApiException ? error.message : 'Please try again.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
-    final attendees = state.attendees;
+    final attendees = _eventFilter == null
+        ? state.attendees
+        : state.attendees.where((person) => person.eventId == _eventFilter).toList();
     return Panel(
       padding: EdgeInsets.zero,
       child: Column(
@@ -24,6 +51,29 @@ class AttendeesPanel extends StatelessWidget {
               'Attendee check-in',
               '${state.checkedInCount} of ${attendees.length} guests checked in.',
             ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: DropdownButtonFormField<String?>(
+                value: _eventFilter,
+                decoration: const InputDecoration(labelText: 'Filter by event'),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('All events')),
+                  for (final event in state.events)
+                    DropdownMenuItem<String?>(value: event.id, child: Text(event.name)),
+                ],
+                onChanged: (value) => setState(() => _eventFilter = value),
+              ),
+            ),
+            if (state.dataError != null)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(children: [
+                  Expanded(child: Text(state.dataError!, style: const TextStyle(color: AppColors.danger))),
+                  TextButton(onPressed: state.loadOrganizerData, child: const Text('Retry')),
+                ]),
+              ),
+            if (state.isLoadingData && attendees.isEmpty)
+              const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
           ),
           if (attendees.isEmpty)
             const Padding(
@@ -33,7 +83,7 @@ class AttendeesPanel extends StatelessWidget {
           for (final person in attendees)
             _AttendeeRow(
               person: person,
-              onToggle: () => state.toggleCheckIn(person.id),
+              onToggle: () => _toggle(person),
             ),
         ],
       ),
@@ -45,7 +95,7 @@ class _AttendeeRow extends StatelessWidget {
   const _AttendeeRow({required this.person, required this.onToggle});
 
   final Attendee person;
-  final VoidCallback onToggle;
+  final Future<void> Function() onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +137,7 @@ class _AttendeeRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
             ),
-            child: Text(checked ? 'Checked in' : 'Check in'),
+            child: Text(checked ? 'Undo' : 'Check in'),
           ),
         ],
       ),

@@ -3,28 +3,53 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/format.dart';
 import '../models/models.dart';
+import '../services/gatherly_api.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 
-class OrdersPanel extends StatelessWidget {
+class OrdersPanel extends StatefulWidget {
   const OrdersPanel({super.key});
+
+  @override
+  State<OrdersPanel> createState() => _OrdersPanelState();
+}
+
+class _OrdersPanelState extends State<OrdersPanel> {
+  String? _eventFilter;
 
   Future<void> _refund(BuildContext context, Order order) async {
     final state = AppScope.of(context);
     final ok = await confirmDialog(
       context,
-      title: 'Refund ${order.id}?',
+      title: 'Refund ${order.number}?',
       message: '${order.buyer} will be refunded ${formatPeso(order.amountCentavos)}.',
       confirmLabel: 'Refund',
     );
     if (!ok || !context.mounted) return;
-    state.refundOrder(order.id);
-    showToast(context, '${order.id} refunded successfully.');
+    try {
+      await state.refundOrder(order.id);
+      if (context.mounted) showToast(context, '${order.number} refunded successfully.');
+    } catch (error) {
+      if (context.mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Could not refund order'),
+            content: Text(error is GatherlyApiException ? error.message : 'Please try again.'),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final orders = AppScope.of(context).orders;
+    final state = AppScope.of(context);
+    final orders = state.orders;
+    final filtered = _eventFilter == null
+        ? orders
+        : orders.where((order) => order.eventId == _eventFilter).toList();
     return Panel(
       padding: EdgeInsets.zero,
       child: Column(
@@ -34,17 +59,41 @@ class OrdersPanel extends StatelessWidget {
             padding: EdgeInsets.all(24),
             child: PanelTitle('Recent orders', 'Review payments and process refunds.'),
           ),
-          if (orders.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: DropdownButtonFormField<String?>(
+              value: _eventFilter,
+              decoration: const InputDecoration(labelText: 'Filter by event'),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('All events')),
+                for (final event in state.events)
+                  DropdownMenuItem<String?>(value: event.id, child: Text(event.name)),
+              ],
+              onChanged: (value) => setState(() => _eventFilter = value),
+            ),
+          ),
+          if (state.dataError != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Expanded(child: Text(state.dataError!, style: const TextStyle(color: AppColors.danger))),
+                TextButton(onPressed: state.loadOrganizerData, child: const Text('Retry')),
+              ]),
+            ),
+          if (state.isLoadingData && orders.isEmpty)
+            const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
+          if (filtered.isEmpty)
             const Padding(
               padding: EdgeInsets.fromLTRB(24, 16, 24, 48),
-              child: Center(child: Text('No orders yet.')),
+              child: Center(child: Text('No orders found.')),
             ),
-          for (final order in orders)
+          for (final order in filtered)
             _OrderRow(order: order, onRefund: () => _refund(context, order)),
         ],
       ),
     );
   }
+
 }
 
 class _OrderRow extends StatelessWidget {
@@ -70,7 +119,7 @@ class _OrderRow extends StatelessWidget {
         Text(order.buyer, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
         Text(
-          '${order.id} · ${order.eventName}',
+          '${order.number} · ${order.eventName}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 11, color: AppColors.muted),
@@ -87,7 +136,7 @@ class _OrderRow extends StatelessWidget {
       foreground: order.refunded ? AppColors.refundText : AppColors.success,
     );
     final button = OutlinedButton(
-      onPressed: order.refunded ? null : onRefund,
+      onPressed: order.status == 'Paid' ? onRefund : null,
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.ink,
         minimumSize: const Size(0, 38),
